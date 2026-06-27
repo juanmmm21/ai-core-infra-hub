@@ -83,25 +83,27 @@ El Hub expone endpoints REST estructurados en FastAPI. A continuacion se detalla
 ## Instrucciones de Despliegue y Ejecucion
 
 ### Requisitos Previos
-El Hub requiere Python 3.10+ y acceso a las dependencias de los proyectos vecinos. Se recomienda utilizar el entorno virtual existente en `nexus-second-brain`.
+El Hub requiere Python 3.10+ y cuenta con su propio entorno virtual dedicado para asegurar aislamiento total de dependencias.
 
-### Instalacion de Dependencias del Hub
-Para asegurar que todos los modulos adicionales esten disponibles, ejecute en la carpeta del hub:
+### Instalacion de Dependencias y Entorno Virtual
+Para configurar el entorno virtual local e instalar las dependencias, ejecute en la carpeta del hub:
 ```bash
-../nexus-second-brain/.venv/bin/pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ### Ejecucion del Servidor
-Arrancar la aplicacion mediante el script launcher example:
+Arrancar la aplicacion mediante el script launcher:
 ```bash
-../nexus-second-brain/.venv/bin/python example.py
+python example.py
 ```
 El panel estara disponible en la direccion `http://127.0.0.1:8000`.
 
 ### Ejecucion de Tests de Integracion
-Para comprobar el correcto enlazado y funcionamiento de las APIs REST:
+Para comprobar el correcto funcionamiento de las APIs REST:
 ```bash
-../nexus-second-brain/.venv/bin/python test_hub.py
+python test_hub.py
 ```
 
 ---
