@@ -338,6 +338,20 @@
                     </div>
 
                     <div class="card">
+                        <div class="card-header">Entrenar Infraestructura (Subida de Documentos)</div>
+                        <div class="input-group">
+                            <label class="input-label">Título del Documento</label>
+                            <input type="text" id="doc-upload-title" placeholder="Ej: mi_documento_de_arquitectura">
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Contenido Técnico del Documento</label>
+                            <textarea id="doc-upload-content" placeholder="Escribe o pega aquí el contenido técnico para indexar en HNSW y BM25..." style="height: 100px;"></textarea>
+                        </div>
+                        <button class="btn" onclick="uploadDocumentForTraining()">Indexar y Entrenar</button>
+                        <div id="doc-upload-status" style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"></div>
+                    </div>
+
+                    <div class="card">
                         <div class="card-header">Respuesta Consolidada</div>
                         <div class="output-box" id="unified-response">La respuesta del pipeline orquestado aparecerá aquí...</div>
                     </div>
@@ -873,6 +887,35 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             } catch (err) {
                 return { error: err.toString() };
             }
+        }
+
+        async function uploadDocumentForTraining() {
+            const title = document.getElementById('doc-upload-title').value;
+            const content = document.getElementById('doc-upload-content').value;
+            const statusBox = document.getElementById('doc-upload-status');
+            
+            if (!title.trim() || !content.trim()) {
+                statusBox.style.color = "#ff0055";
+                statusBox.innerText = "Por favor introduce un título y contenido para el documento.";
+                return;
+            }
+            
+            statusBox.style.color = "var(--accent-cyan)";
+            statusBox.innerText = "Fragmentando semánticamente e insertando en NanoVectorDB...";
+            
+            const res = await postData('/api/documents/upload', { title: title, content: content });
+            if (res.error) {
+                statusBox.style.color = "#ff0055";
+                statusBox.innerText = "Error: " + res.error;
+                return;
+            }
+            
+            statusBox.style.color = "#00ff66";
+            statusBox.innerText = `Éxito: Se generaron e indexaron ${res.chunks_count} fragmentos semánticos en NanoVectorDB y BM25.`;
+            
+            // Clean fields
+            document.getElementById('doc-upload-title').value = "";
+            document.getElementById('doc-upload-content').value = "";
         }
 
         // Tab API Integrations

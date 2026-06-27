@@ -58,5 +58,24 @@ class TestHubAPI(unittest.TestCase):
         self.assertIn("response", data)
         self.assertIn("telemetry", data)
 
+    def test_document_upload_and_rag(self):
+        # 1. Upload new document to the Hub
+        doc_payload = {
+            "title": "manual_antigravity",
+            "content": "Antigravity es un asistente de IA avanzado disenado por Google DeepMind. Utiliza redes de orquestacion reactiva."
+        }
+        upload_resp = self.client.post("/api/documents/upload", json=doc_payload)
+        self.assertEqual(upload_resp.status_code, 200)
+        upload_data = upload_resp.json()
+        self.assertEqual(upload_data["status"], "success")
+        self.assertGreaterEqual(upload_data["chunks_count"], 1)
+        
+        # 2. Query the pipeline to see if the new context is retrieved and formatted by the RAG system!
+        pipeline_resp = self.client.post("/api/pipeline/run", json={"prompt": "Quien diseno Antigravity?"})
+        self.assertEqual(pipeline_resp.status_code, 200)
+        pipeline_data = pipeline_resp.json()
+        self.assertEqual(pipeline_data["status"], "success")
+        self.assertIn("Google DeepMind", pipeline_data["response"])
+
 if __name__ == "__main__":
     unittest.main()

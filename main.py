@@ -532,7 +532,10 @@ def init_global_pipeline():
 def startup_event():
     init_global_pipeline()
 
-# --- MODELOS DE DATOS ---
+class DocumentUploadRequest(BaseModel):
+    title: str
+    content: str
+
 class TokenizeRequest(BaseModel):
     text: str
 
@@ -1117,6 +1120,50 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         
     return summary
 
+
+@app.post("/api/documents/upload")
+def api_documents_upload(req: DocumentUploadRequest):
+    global global_db, global_bm25, global_corpus
+    if global_db is None or global_bm25 is None:
+        init_global_pipeline()
+        
+    title_clean = req.title.strip().replace(" ", "_").lower()
+    content_text = req.content.strip()
+    
+    # 1. Run Chunker
+    provider = MockEmbeddingProvider(dimension=64)
+    chunker = SemanticChunker(embedding_provider=provider) if SemanticChunker else None
+    
+    chunks_list = []
+    if chunker:
+        try:
+            chunks = chunker.chunk_text(content_text)
+            chunks_list = [c["text"] for c in chunks]
+        except Exception as e:
+            logger.error(f"Error chunking uploaded document: {e}")
+            chunks_list = [content_text]
+    else:
+        chunks_list = [s.strip() for s in content_text.split("\n\n") if s.strip()]
+        
+    if not chunks_list:
+        chunks_list = [content_text]
+        
+    # 2. Insert into database (HNSW) and global_corpus (BM25)
+    for i, chunk_text in enumerate(chunks_list):
+        doc_id = f"uploaded_{title_clean}_chunk_{i}"
+        
+        # Calculate embedding vector
+        vec = provider.get_embeddings([chunk_text])[0]
+        vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
+        
+        # Insert
+        global_db.insert(id=doc_id, vector=vec_64, metadata={"source": req.title})
+        global_corpus[doc_id] = chunk_text
+        
+    # 3. Re-fit BM25
+    global_bm25.fit(global_corpus)
+    
+    return {"status": "success", "chunks_count": len(chunks_list)}
 
 @app.post("/api/pipeline/run")
 async def api_pipeline_run(req: UnifiedPipelineRequest):
