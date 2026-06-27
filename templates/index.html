@@ -229,7 +229,6 @@
             transform: scale(0.98);
         }
 
-        /* Output Box Styling */
         .output-box {
             background-color: #0b0c10;
             border: 1px solid #1f2833;
@@ -241,6 +240,35 @@
             overflow-x: auto;
             white-space: pre-wrap;
             max-height: 300px;
+        }
+
+        .response-premium {
+            background-color: #151a22;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            color: var(--text-primary);
+            overflow-y: auto;
+            line-height: 1.6;
+            max-height: 480px;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .inspect-item {
+            background-color: #0b0c10;
+            border: 1px solid #1f2833;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .inspect-item:hover {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 10px rgba(138, 43, 226, 0.2);
         }
 
         /* SVG Graph Canvas */
@@ -356,7 +384,7 @@
 
                     <div class="card">
                         <div class="card-header">Respuesta Consolidada</div>
-                        <div class="output-box" id="unified-response">La respuesta del pipeline orquestado aparecerá aquí...</div>
+                        <div class="response-premium" id="unified-response">La respuesta del pipeline orquestado aparecerá aquí...</div>
                     </div>
                 </div>
 
@@ -365,6 +393,19 @@
                         <div class="card-header">Rastreo de Telemetría (llm-observability-tracer)</div>
                         <div id="unified-telemetry" style="max-height: 450px; overflow-y: auto;">
                             Las trazas y Spans de ejecución aparecerán aquí ordenados de forma jerárquica...
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Visor e Inspector de NanoVectorDB</span>
+                            <button class="btn" onclick="loadVectorDbRecords()" style="padding: 6px 12px; font-size: 12px; background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); font-weight: 500; height: auto;">↻ Actualizar</button>
+                        </div>
+                        <div class="input-group" style="margin-top: 12px; margin-bottom: 12px;">
+                            <input type="text" id="db-inspect-filter" placeholder="🔍 Filtrar registros por ID, contenido o fuente..." oninput="filterInspectRecords()">
+                        </div>
+                        <div id="db-inspect-container" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                            <div style="color: #8892b0; font-size: 13px; font-style: italic;">Cargando registros...</div>
                         </div>
                     </div>
                 </div>
@@ -892,6 +933,102 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             }
         }
 
+        let allInspectRecords = [];
+        
+        async function loadVectorDbRecords() {
+            const container = document.getElementById('db-inspect-container');
+            if (!container) return;
+            
+            try {
+                const response = await fetch('/api/vector-db/list');
+                const res = await response.json();
+                
+                if (res.status === "success") {
+                    allInspectRecords = res.records;
+                    renderInspectRecords(allInspectRecords);
+                } else {
+                    container.innerHTML = `<div style="color: #ff0055; font-size: 13px;">Error al cargar registros: ${res.error}</div>`;
+                }
+            } catch (err) {
+                container.innerHTML = `<div style="color: #ff0055; font-size: 13px;">Error de conexión: ${err.toString()}</div>`;
+            }
+        }
+        
+        function renderInspectRecords(records) {
+            const container = document.getElementById('db-inspect-container');
+            if (!container) return;
+            
+            if (records.length === 0) {
+                container.innerHTML = `<div style="color: #8892b0; font-size: 13px; font-style: italic;">La base de datos vectorial está vacía. Indexa algunos documentos arriba.</div>`;
+                return;
+            }
+            
+            container.innerHTML = "";
+            records.forEach(rec => {
+                const div = document.createElement('div');
+                div.className = 'inspect-item';
+                
+                const vecStr = `[${rec.vector_preview.map(v => v.toFixed(3)).join(', ')}, ...]`;
+                
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--accent-cyan); margin-bottom: 6px;">
+                        <span>ID: ${rec.id}</span>
+                        <span style="color: #8892b0; font-size: 11px; font-weight: 400;">Fuente: ${rec.metadata.source || 'Manual'}</span>
+                    </div>
+                    <div style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #151a22; padding: 6px; border-radius: 4px; margin-bottom: 6px;">
+                        <strong>Vector (5d):</strong> ${vecStr}
+                    </div>
+                    <div style="color: var(--text-primary); max-height: 80px; overflow-y: auto; white-space: pre-wrap; font-style: italic; font-size: 12px;">
+                        "${rec.text}"
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        function filterInspectRecords() {
+            const q = document.getElementById('db-inspect-filter').value.toLowerCase();
+            const filtered = allInspectRecords.filter(rec => 
+                rec.id.toLowerCase().includes(q) || 
+                rec.text.toLowerCase().includes(q) ||
+                (rec.metadata.source && rec.metadata.source.toLowerCase().includes(q))
+            );
+            renderInspectRecords(filtered);
+        }
+
+        function formatMarkdownToHtml(mdText) {
+            if (!mdText) return "";
+            
+            let html = mdText;
+            
+            // Replace ### headings
+            html = html.replace(/### (.*?)\n/g, '<h3 style="color: var(--accent-cyan); font-size: 16px; margin: 16px 0 8px 0; font-weight: 600; border-bottom: 1px solid rgba(0, 255, 255, 0.1); padding-bottom: 4px;">$1</h3>');
+            
+            // Replace #### headings
+            html = html.replace(/#### (.*?)\n/g, '<h4 style="color: var(--text-light); font-size: 14px; margin: 12px 0 6px 0; font-weight: 600;">$1</h4>');
+            
+            // Replace document boxes
+            // 📄 **[`doc_id`]**\n> doc_text
+            html = html.replace(/📄 \*\*\[`(.*?)`\]\*\*\n>\s*(.*?)(?=\n\n|$)/g, `
+                <div style="background-color: #0b0c10; border-left: 3px solid var(--accent-purple); padding: 12px; margin-bottom: 12px; border-radius: 4px;">
+                    <div style="font-weight: 600; font-size: 12px; color: var(--accent-purple); margin-bottom: 4px;">📄 Fragmento: $1</div>
+                    <div style="color: var(--text-primary); font-style: italic; font-size: 13px; line-height: 1.5;">"$2"</div>
+                </div>
+            `);
+            
+            // Replace emoji bullet points
+            html = html.replace(/👉 \*(.*?)\*\s*\((.*?)\)/g, `
+                <div style="background: rgba(138, 43, 226, 0.05); border: 1px dashed rgba(138, 43, 226, 0.2); padding: 12px; margin-bottom: 10px; border-radius: 6px;">
+                    <div style="color: var(--text-light); line-height: 1.5; font-size: 13px;">✦ "$1"</div>
+                    <div style="text-align: right; font-size: 11px; color: #8892b0; margin-top: 4px;">Fuente: $2</div>
+                </div>
+            `);
+            
+            // Replace newlines with <br>
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
         async function uploadFileForTraining() {
             const fileInput = document.getElementById('doc-file-input');
             const statusBox = document.getElementById('doc-upload-status');
@@ -927,6 +1064,9 @@ print("Listado de archivos:", os.listdir("."))</textarea>
                 
                 // Clear input
                 fileInput.value = "";
+                
+                // Refresh Vector DB listing
+                loadVectorDbRecords();
             } catch (err) {
                 statusBox.style.color = "#ff0055";
                 statusBox.innerText = "Error de red: " + err.toString();
@@ -960,6 +1100,9 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             // Clean fields
             document.getElementById('doc-upload-title').value = "";
             document.getElementById('doc-upload-content').value = "";
+            
+            // Refresh Vector DB listing
+            loadVectorDbRecords();
         }
 
         // Tab API Integrations
@@ -969,17 +1112,37 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             const telemetryBox = document.getElementById('unified-telemetry');
             resBox.innerText = "Ejecutando pipeline unificado de extremo a extremo...";
             telemetryBox.innerHTML = "Generando Spans de rastreo...";
-
+ 
             const res = await postData('/api/pipeline/run', { prompt: prompt });
             if (res.error) {
                 resBox.innerText = "Error: " + res.error;
                 return;
             }
-
+ 
             if (res.status === "blocked") {
-                resBox.innerHTML = `<span style="color: #ff0055;">[BLOQUEADO] ${res.reason}</span>`;
+                resBox.innerHTML = `
+                    <div style="background-color: rgba(255, 0, 85, 0.1); border: 1px solid rgba(255, 0, 85, 0.3); color: #ff0055; padding: 16px; border-radius: 8px; font-weight: 500;">
+                        <strong>[BLOQUEADO POR POLÍTICA DE SEGURIDAD]</strong><br>${res.reason}
+                    </div>
+                `;
             } else {
-                resBox.innerText = `[Modelo: ${res.model} | Costo Estimado: $${res.cost}]\n\n${res.response}`;
+                const modelBadge = `<span style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">${res.model}</span>`;
+                const costBadge = `<span style="background: linear-gradient(135deg, var(--accent-pink), #ff5e62); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">Costo Estimado: $${res.cost}</span>`;
+                
+                const formattedHtml = formatMarkdownToHtml(res.response);
+                
+                resBox.innerHTML = `
+                    <div style="display: flex; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                        ${modelBadge}
+                        ${costBadge}
+                    </div>
+                    <div style="color: var(--text-light); font-size: 14px; line-height: 1.6;">
+                        ${formattedHtml}
+                    </div>
+                `;
+                
+                // Auto refresh
+                loadVectorDbRecords();
             }
 
             // Render telemetry Spans
@@ -1211,6 +1374,11 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             const res = await postData('/api/eval/benchmark', { candidate: cand, reference: ref });
             out.innerText = JSON.stringify(res, null, 2);
         }
+
+        // Auto load database records on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadVectorDbRecords();
+        });
     </script>
 </body>
 </html>

@@ -1282,6 +1282,41 @@ def api_documents_upload(req: DocumentUploadRequest):
     
     return {"status": "success", "chunks_count": len(chunks_list)}
 
+@app.get("/api/vector-db/list")
+def api_vector_db_list():
+    global global_db, global_corpus
+    if global_db is None:
+        init_global_pipeline()
+        
+    records = []
+    # If using real NanoVectorDB (with self.vectors and self.metadata)
+    if hasattr(global_db, "vectors") and hasattr(global_db, "metadata"):
+        for doc_id, vec in global_db.vectors.items():
+            meta = global_db.metadata.get(doc_id, {})
+            text = global_corpus.get(doc_id, "Texto no indexado en caché local")
+            # Convert numpy array to list if needed
+            vec_list = vec.tolist() if hasattr(vec, "tolist") else list(vec)
+            records.append({
+                "id": str(doc_id),
+                "metadata": meta,
+                "text": text,
+                "vector_preview": vec_list[:5]
+            })
+    # If using fallback NanoVectorDB (with self.data)
+    elif hasattr(global_db, "data"):
+        for doc_id, item in global_db.data.items():
+            meta = item.get("metadata", {})
+            vec = item.get("vector", [])
+            text = global_corpus.get(doc_id, "Texto no indexado en caché local")
+            records.append({
+                "id": str(doc_id),
+                "metadata": meta,
+                "text": text,
+                "vector_preview": list(vec[:5])
+            })
+            
+    return {"status": "success", "records": records}
+
 @app.post("/api/pipeline/run")
 async def api_pipeline_run(req: UnifiedPipelineRequest):
     global global_shield, global_db, global_bm25, global_memory, global_router, global_runtime, global_reranker, global_corpus

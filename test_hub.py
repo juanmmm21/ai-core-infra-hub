@@ -95,5 +95,13 @@ class TestHubAPI(unittest.TestCase):
         self.assertEqual(pipeline_data["status"], "success")
         self.assertIn("de forma atomica", pipeline_data["response"])
 
+    def test_list_vector_db(self):
+        response = self.client.get("/api/vector-db/list")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "success")
+        self.assertIn("records", data)
+        self.assertIsInstance(data["records"], list)
+
 if __name__ == "__main__":
     unittest.main()
