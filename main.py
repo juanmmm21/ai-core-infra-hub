@@ -1094,23 +1094,30 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
     if docs:
         prompt_normalized = normalize_text(prompt_clean)
         prompt_words = [w.strip("?,.:;!\"'()").lower() for w in prompt_normalized.split() if len(w) > 2]
-        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "hay", "mas", "existen", "en", "iot", "modo", "modos", "operacion"}
+        # Common grammatical particles only
+        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "existen", "existan", "existe"}
         query_keywords = [w for w in prompt_words if w not in stopwords]
         
         best_doc_id = None
         best_doc_text = None
         max_overlap = -1
         
-        for doc_id, doc_text in docs:
-            doc_norm = normalize_text(doc_text)
-            overlap = sum(1 for kw in query_keywords if kw in doc_norm)
-            if overlap > max_overlap:
-                max_overlap = overlap
-                best_doc_id = doc_id
-                best_doc_text = doc_text
-                
-        # If we have a matching document (especially for user uploaded PDFs or files)
-        if best_doc_text and (max_overlap > 0 or "file_" in best_doc_id):
+        # 1. Search by keyword overlap
+        if query_keywords:
+            for doc_id, doc_text in docs:
+                doc_norm = normalize_text(doc_text)
+                overlap = sum(1 for kw in query_keywords if kw in doc_norm)
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_doc_id = doc_id
+                    best_doc_text = doc_text
+                    
+        # 2. Fallback to top-ranked RAG candidate if overlap is zero or empty keywords
+        if (best_doc_text is None or max_overlap <= 0) and docs:
+            best_doc_id = docs[0][0]
+            best_doc_text = docs[0][1]
+            
+        if best_doc_text:
             cleaned_text = clean_slide_text(best_doc_text)
             
             # Format lines (convert lines starting with terms into lists/bold keys)
@@ -1395,6 +1402,13 @@ async def api_pipeline_run(req: UnifiedPipelineRequest):
     # Cierre de Span Raíz
     global_tracer.end_span()
     
+    if not out_safe:
+        return {
+            "status": "blocked",
+            "reason": out_reason,
+            "telemetry": global_tracer.get_trace_tree()
+        }
+        
     return {
         "status": "success",
         "model": model,
