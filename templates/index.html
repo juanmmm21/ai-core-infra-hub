@@ -398,7 +398,10 @@
 
                     <div class="card" style="margin-top: 24px;">
                         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                            <span>Visor e Inspector de NanoVectorDB</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span>Visor e Inspector de NanoVectorDB</span>
+                                <span id="db-inspect-count" style="font-size: 12px; color: #8892b0; font-weight: 400;">(0 chunks)</span>
+                            </div>
                             <button class="btn" onclick="loadVectorDbRecords()" style="padding: 6px 12px; font-size: 12px; background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); font-weight: 500; height: auto;">↻ Actualizar</button>
                         </div>
                         <div class="input-group" style="margin-top: 12px; margin-bottom: 12px;">
@@ -956,10 +959,15 @@ print("Listado de archivos:", os.listdir("."))</textarea>
         
         function renderInspectRecords(records) {
             const container = document.getElementById('db-inspect-container');
+            const countLabel = document.getElementById('db-inspect-count');
             if (!container) return;
             
+            if (countLabel) {
+                countLabel.innerText = `(${records.length} chunks)`;
+            }
+            
             if (records.length === 0) {
-                container.innerHTML = `<div style="color: #8892b0; font-size: 13px; font-style: italic;">La base de datos vectorial está vacía. Indexa algunos documentos arriba.</div>`;
+                container.innerHTML = `<div style="color: #8892b0; font-size: 13px; font-style: italic; text-align: center; padding: 20px;">No se encontraron registros coincidentes.</div>`;
                 return;
             }
             
@@ -967,19 +975,34 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             records.forEach(rec => {
                 const div = document.createElement('div');
                 div.className = 'inspect-item';
+                div.style.cursor = 'pointer';
+                div.onclick = () => openInspectModal(rec);
                 
-                const vecStr = `[${rec.vector_preview.map(v => v.toFixed(3)).join(', ')}, ...]`;
+                // Color badge based on ID source
+                let badgeColor = 'var(--accent-cyan)';
+                let badgeBg = 'rgba(0, 255, 255, 0.05)';
+                let sourceLabel = rec.metadata.source || 'Manual';
+                
+                if (rec.id.startsWith('file_')) {
+                    badgeColor = 'var(--accent-purple)';
+                    badgeBg = 'rgba(138, 43, 226, 0.05)';
+                } else if (rec.id.startsWith('uploaded_')) {
+                    badgeColor = 'var(--accent-pink)';
+                    badgeBg = 'rgba(255, 0, 85, 0.05)';
+                } else {
+                    badgeColor = '#4f92ff';
+                    badgeBg = 'rgba(79, 146, 255, 0.05)';
+                }
+                
+                const textExcerpt = rec.text.length > 120 ? rec.text.substring(0, 120) + '...' : rec.text;
                 
                 div.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--accent-cyan); margin-bottom: 6px;">
-                        <span>ID: ${rec.id}</span>
-                        <span style="color: #8892b0; font-size: 11px; font-weight: 400;">Fuente: ${rec.metadata.source || 'Manual'}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; color: #e2e8f0;">${rec.id}</span>
+                        <span style="color: ${badgeColor}; background: ${badgeBg}; border: 1px solid ${badgeColor}33; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase;">${sourceLabel}</span>
                     </div>
-                    <div style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #151a22; padding: 6px; border-radius: 4px; margin-bottom: 6px;">
-                        <strong>Vector (5d):</strong> ${vecStr}
-                    </div>
-                    <div style="color: var(--text-primary); max-height: 80px; overflow-y: auto; white-space: pre-wrap; font-style: italic; font-size: 12px;">
-                        "${rec.text}"
+                    <div style="color: #8892b0; font-size: 12.5px; line-height: 1.5; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 2px;">
+                        "${textExcerpt}"
                     </div>
                 `;
                 container.appendChild(div);
@@ -994,6 +1017,59 @@ print("Listado de archivos:", os.listdir("."))</textarea>
                 (rec.metadata.source && rec.metadata.source.toLowerCase().includes(q))
             );
             renderInspectRecords(filtered);
+        }
+
+        function openInspectModal(record) {
+            const modal = document.getElementById('inspect-modal');
+            const title = document.getElementById('modal-title');
+            const metaContainer = document.getElementById('modal-meta');
+            const vectorContainer = document.getElementById('modal-vector');
+            const textContainer = document.getElementById('modal-text');
+            
+            if (!modal) return;
+            
+            title.innerText = `Vector ID: ${record.id}`;
+            textContainer.innerText = record.text;
+            
+            // Format meta tags
+            metaContainer.innerHTML = "";
+            const tags = [
+                { key: "ID", val: record.id, color: "var(--accent-cyan)" },
+                { key: "Fuente", val: record.metadata.source || "Manual", color: "var(--accent-purple)" }
+            ];
+            
+            // Add custom meta properties
+            Object.keys(record.metadata).forEach(k => {
+                if (k !== 'source') {
+                    tags.push({ key: k, val: record.metadata[k], color: "var(--accent-pink)" });
+                }
+            });
+            
+            tags.forEach(t => {
+                const tagSpan = document.createElement('span');
+                tagSpan.style.color = t.color;
+                tagSpan.style.background = `${t.color}10`;
+                tagSpan.style.border = `1px solid ${t.color}33`;
+                tagSpan.style.padding = '4px 10px';
+                tagSpan.style.borderRadius = '12px';
+                tagSpan.style.fontSize = '12px';
+                tagSpan.style.fontWeight = '500';
+                tagSpan.innerText = `${t.key}: ${t.val}`;
+                metaContainer.appendChild(tagSpan);
+            });
+            
+            // Format vector coordinates
+            const vecStr = `[${record.vector_preview.map(v => v.toFixed(6)).join(', ')}, ...]`;
+            vectorContainer.innerText = vecStr;
+            
+            modal.style.display = 'flex';
+        }
+        
+        function closeInspectModal() {
+            const modal = document.getElementById('inspect-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function formatMarkdownToHtml(mdText) {
@@ -1385,5 +1461,29 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             loadVectorDbRecords();
         });
     </script>
+    <!-- Modal for Document Details -->
+    <div id="inspect-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: #151a22; border: 1px solid var(--border-color); border-radius: 12px; width: 90%; max-width: 650px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                <h3 id="modal-title" style="color: var(--accent-cyan); font-size: 18px; font-weight: 600; margin: 0;">Detalles del Vector</h3>
+                <button onclick="closeInspectModal()" style="background: none; border: none; color: #8892b0; font-size: 24px; cursor: pointer; line-height: 1;">×</button>
+            </div>
+            <div>
+                <div style="font-size: 12px; color: #8892b0; margin-bottom: 4px; font-weight: 600;">IDENTIFICADOR & FUENTE:</div>
+                <div id="modal-meta" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+            </div>
+            <div>
+                <div style="font-size: 12px; color: #8892b0; margin-bottom: 4px; font-weight: 600;">VISTA PARCIAL DEL VECTOR (64D):</div>
+                <div id="modal-vector" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #0b0c10; border: 1px solid #1f2833; padding: 12px; border-radius: 6px; color: #00ff66; max-height: 80px; overflow-y: auto; word-break: break-all;"></div>
+            </div>
+            <div>
+                <div style="font-size: 12px; color: #8892b0; margin-bottom: 4px; font-weight: 600;">CONTENIDO COMPLETO DEL FRAGMENTO:</div>
+                <div id="modal-text" style="font-size: 13.5px; color: var(--text-primary); background: #0b0c10; border: 1px solid #1f2833; padding: 16px; border-radius: 6px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; font-style: italic;"></div>
+            </div>
+            <div style="text-align: right;">
+                <button class="btn" onclick="closeInspectModal()" style="padding: 8px 16px; font-size: 13px;">Cerrar Ventana</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -1081,15 +1081,15 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
                 continue
             if re.match(r'^\d+\.?$', line_strip):
                 continue
-            line_lower = line_strip.lower()
-            if any(nk in line_lower for nk in noise_keywords):
+            line_norm = normalize_text(line_strip)
+            if any(nk in line_norm for nk in noise_keywords):
                 continue
             cleaned_lines.append(line_strip)
         return "\n".join(cleaned_lines)
         
     # Analyze and parse the retrieved context documents
     import re
-    docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |$)", context, re.DOTALL)
+    docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |\n\nRecuerdo de Memoria|$)", context, re.DOTALL)
     
     if docs:
         prompt_normalized = normalize_text(prompt_clean)
