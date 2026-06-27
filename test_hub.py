@@ -77,5 +77,23 @@ class TestHubAPI(unittest.TestCase):
         self.assertEqual(pipeline_data["status"], "success")
         self.assertIn("Google DeepMind", pipeline_data["response"])
 
+    def test_file_upload_and_rag(self):
+        # 1. Upload a mock text file
+        file_content = b"El pipeline de RAG conecta bases vectoriales con el recuperador BM25 de forma atomica."
+        files = {"file": ("documento_de_prueba.txt", file_content)}
+        upload_resp = self.client.post("/api/documents/upload-file", files=files)
+        self.assertEqual(upload_resp.status_code, 200)
+        upload_data = upload_resp.json()
+        self.assertEqual(upload_data["status"], "success")
+        self.assertEqual(upload_data["filename"], "documento_de_prueba.txt")
+        self.assertGreaterEqual(upload_data["chunks_count"], 1)
+
+        # 2. Query the pipeline to verify retrieval
+        pipeline_resp = self.client.post("/api/pipeline/run", json={"prompt": "Como se conecta el pipeline RAG?"})
+        self.assertEqual(pipeline_resp.status_code, 200)
+        pipeline_data = pipeline_resp.json()
+        self.assertEqual(pipeline_data["status"], "success")
+        self.assertIn("de forma atomica", pipeline_data["response"])
+
 if __name__ == "__main__":
     unittest.main()

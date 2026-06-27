@@ -340,14 +340,17 @@
                     <div class="card">
                         <div class="card-header">Entrenar Infraestructura (Subida de Documentos)</div>
                         <div class="input-group">
-                            <label class="input-label">Título del Documento</label>
-                            <input type="text" id="doc-upload-title" placeholder="Ej: mi_documento_de_arquitectura">
+                            <label class="input-label">Opción 1: Subir Archivo (PDF, TXT, MD, PY, JSON...)</label>
+                            <input type="file" id="doc-file-input" style="width: 100%; color: var(--text-light); margin-bottom: 12px; font-family: inherit;">
+                            <button class="btn" onclick="uploadFileForTraining()" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));">Subir e Indexar Archivo</button>
                         </div>
+                        <div style="text-align: center; margin: 16px 0; color: #8892b0; font-size: 13px; font-weight: 500;">— O TAMBIÉN —</div>
                         <div class="input-group">
-                            <label class="input-label">Contenido Técnico del Documento</label>
-                            <textarea id="doc-upload-content" placeholder="Escribe o pega aquí el contenido técnico para indexar en HNSW y BM25..." style="height: 100px;"></textarea>
+                            <label class="input-label">Opción 2: Pegar Texto Técnico</label>
+                            <input type="text" id="doc-upload-title" placeholder="Ej: mi_documento_de_arquitectura" style="margin-bottom: 8px;">
+                            <textarea id="doc-upload-content" placeholder="Escribe o pega aquí el contenido técnico para indexar en HNSW y BM25..." style="height: 80px;"></textarea>
                         </div>
-                        <button class="btn" onclick="uploadDocumentForTraining()">Indexar y Entrenar</button>
+                        <button class="btn" onclick="uploadDocumentForTraining()">Indexar y Entrenar Texto</button>
                         <div id="doc-upload-status" style="margin-top: 10px; font-size: 13px; color: var(--accent-cyan);"></div>
                     </div>
 
@@ -886,6 +889,47 @@ print("Listado de archivos:", os.listdir("."))</textarea>
                 return await response.json();
             } catch (err) {
                 return { error: err.toString() };
+            }
+        }
+
+        async function uploadFileForTraining() {
+            const fileInput = document.getElementById('doc-file-input');
+            const statusBox = document.getElementById('doc-upload-status');
+            
+            if (fileInput.files.length === 0) {
+                statusBox.style.color = "#ff0055";
+                statusBox.innerText = "Por favor selecciona un archivo primero.";
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            statusBox.style.color = "var(--accent-cyan)";
+            statusBox.innerText = `Subiendo y procesando ${file.name}...`;
+            
+            try {
+                const response = await fetch('/api/documents/upload-file', {
+                    method: 'POST',
+                    body: formData
+                });
+                const res = await response.json();
+                
+                if (res.error) {
+                    statusBox.style.color = "#ff0055";
+                    statusBox.innerText = "Error: " + res.error;
+                    return;
+                }
+                
+                statusBox.style.color = "#00ff66";
+                statusBox.innerText = `Éxito: Se extrajo el texto de '${res.filename}' (${res.total_chars} caracteres) e indexó ${res.chunks_count} fragmentos semánticos.`;
+                
+                // Clear input
+                fileInput.value = "";
+            } catch (err) {
+                statusBox.style.color = "#ff0055";
+                statusBox.innerText = "Error de red: " + err.toString();
             }
         }
 

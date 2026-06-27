@@ -7,7 +7,7 @@ import json
 import logging
 import numpy as np
 from typing import Dict, List, Any, Tuple, Optional, Union
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1120,6 +1120,71 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         
     return summary
 
+
+@app.post("/api/documents/upload-file")
+async def api_documents_upload_file(file: UploadFile = File(...)):
+    global global_db, global_bm25, global_corpus
+    if global_db is None or global_bm25 is None:
+        init_global_pipeline()
+        
+    filename = file.filename
+    _, ext = os.path.splitext(filename.lower())
+    
+    content_text = ""
+    try:
+        if ext == ".pdf":
+            import fitz
+            pdf_bytes = await file.read()
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            pages_text = []
+            for page in doc:
+                pages_text.append(page.get_text())
+            doc.close()
+            content_text = "\n\n".join(pages_text)
+        elif ext in [".txt", ".md", ".json", ".py", ".js", ".csv", ".yaml", ".yml", ".ini"]:
+            file_bytes = await file.read()
+            content_text = file_bytes.decode("utf-8", errors="ignore")
+        else:
+            return {"error": f"Formato de archivo '{ext}' no soportado. Sube un PDF, TXT, MD, etc."}
+    except Exception as e:
+        return {"error": f"Error al leer el archivo: {str(e)}"}
+        
+    if not content_text.strip():
+        return {"error": "El archivo está vacío o no contiene texto extraíble."}
+        
+    provider = MockEmbeddingProvider(dimension=64)
+    chunker = SemanticChunker(embedding_provider=provider) if SemanticChunker else None
+    
+    chunks_list = []
+    if chunker:
+        try:
+            chunks = chunker.chunk_text(content_text)
+            chunks_list = [c["text"] for c in chunks]
+        except Exception as e:
+            logger.error(f"Error chunking document file: {e}")
+            chunks_list = [content_text]
+    else:
+        chunks_list = [s.strip() for s in content_text.split("\n\n") if s.strip()]
+        
+    if not chunks_list:
+        chunks_list = [content_text]
+        
+    title_clean = filename.replace(" ", "_").lower()
+    for i, chunk_text in enumerate(chunks_list):
+        doc_id = f"file_{title_clean}_chunk_{i}"
+        vec = provider.get_embeddings([chunk_text])[0]
+        vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
+        global_db.insert(id=doc_id, vector=vec_64, metadata={"source": filename})
+        global_corpus[doc_id] = chunk_text
+        
+    global_bm25.fit(global_corpus)
+    
+    return {
+        "status": "success",
+        "filename": filename,
+        "chunks_count": len(chunks_list),
+        "total_chars": len(content_text)
+    }
 
 @app.post("/api/documents/upload")
 def api_documents_upload(req: DocumentUploadRequest):
