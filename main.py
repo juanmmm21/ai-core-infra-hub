@@ -1042,63 +1042,81 @@ def api_telemetry():
 def generate_agent_response(prompt: str, context: str, memories: List[str]) -> str:
     prompt_clean = prompt.strip()
     
-    # Context summary
-    summary = (
-        f"Procesando consulta: '{prompt_clean}'\n\n"
-        f"Analisis del Pipeline de IA:\n"
-        f"1. Se han recuperado fragmentos relevantes usando busqueda hibrida BM25 + HNSW NanoVectorDB sobre el corpus del repositorio.\n"
-        f"2. El Cross-Encoder ha re-ordenado los fragmentos segun relevancia.\n"
-        f"3. La capa de memoria recordo las preferencias de desarrollo.\n\n"
-        f"Respuesta Consolidada:\n"
-    )
-    
     # Conversational greetings check
     greetings = ["hola", "que tal", "buenos dias", "buenos días", "buenas tardes", "buenas noches", "hello", "hi"]
     is_greeting = any(g in prompt_clean.lower() for g in greetings)
     
     if is_greeting:
-        summary += (
+        return (
             "¡Hola! ¿Cómo estás? Soy el asistente virtual del AI Core Infra Hub.\n"
             "He procesado tu saludo y veo que es una consulta de baja complejidad. "
             "El enrutador semántico me ha asignado un modelo rápido y económico (como gpt-4o-mini) para responderte.\n"
             "¿En qué puedo ayudarte hoy en relación a la infraestructura de IA (tokenizadores, chunking, bases vectoriales, agentes o guardrails)?"
         )
-    elif "vector" in prompt_clean.lower() or "hnsw" in prompt_clean.lower():
-        summary += (
-            "NanoVectorDB es una base de datos vectorial in-memory escrita en Python "
-            "que implementa indexacion HNSW y similitud de coseno. Permite busquedas de "
-            "vecinos mas cercanos (ANN) con complejidad logaritmica. En la busqueda hibrida, "
-            "los resultados de NanoVectorDB se fusionan con la recuperacion lexica BM25 "
-            "usando score normalization (Lineal Min-Max) o RRF para maximizar la robustez."
-        )
-    elif "chunk" in prompt_clean.lower() or "semantic" in prompt_clean.lower():
-        summary += (
-            "El Semantic Chunker corta documentos basandose en las variaciones de significado "
-            "de las oraciones. Calcula la distancia coseno entre oraciones adyacentes usando "
-            "embeddings y aplica un umbral dinamico (media + factor * desviacion estandar). "
-            "Adicionalmente, limita el tamaño de los chunks usando el BPE Tokenizer de la infraestructura."
-        )
-    elif "guardrail" in prompt_clean.lower() or "seguridad" in prompt_clean.lower():
-        summary += (
-            "El LLM Guardrails Shield actua como un cortafuegos bidireccional. Escanea prompts de entrada "
-            "bloqueando Prompt Injections y redactando PII (como numeros de telefono). Para la salida, "
-            "evalua si hay alucinaciones contrastando semanticamente la respuesta contra los fragmentos del contexto."
-        )
-    elif "agente" in prompt_clean.lower() or "react" in prompt_clean.lower():
-        summary += (
-            "Orchestra Agents implementa ciclos de razonamiento cognitivo ReAct (Thought-Action-Observation) "
-            "mediante un orquestador que planifica y delega subtareas secuenciales a agentes especialistas "
-            "(ResearcherAgent, WriterAgent), los cuales ejecutan herramientas de Python en el sandbox "
-            "seguro de Secure Tool Runtime."
-        )
+        
+    # Analyze and parse the retrieved context documents
+    import re
+    docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |$)", context, re.DOTALL)
+    
+    summary = f"Procesando consulta: '{prompt_clean}'\n\n"
+    summary += "### 🔍 Resultados de Búsqueda Semántica RAG:\n"
+    
+    if docs:
+        summary += "He recuperado y ordenado los siguientes fragmentos relevantes de la documentación del proyecto:\n\n"
+        for doc_id, doc_text in docs[:2]: # Show top 2 matches
+            clean_text = doc_text.strip()
+            # If the block is very long, truncate it nicely
+            if len(clean_text) > 400:
+                excerpt = clean_text[:400] + "..."
+            else:
+                excerpt = clean_text
+            summary += f"📄 **[`{doc_id}`]**\n> {excerpt}\n\n"
+            
+        summary += "---\n"
+        summary += "### 💡 Respuesta y Recomendación del Agente:\n"
+        
+        # Keyword-based advice engine
+        lower_prompt = prompt_clean.lower()
+        if any(w in lower_prompt for w in ["documento", "meter", "entrenar", "pdf", "procesar", "ingestar"]):
+            summary += (
+                "Para alimentar nuevos documentos e indexarlos en la infraestructura de IA, debes seguir este flujo de trabajo:\n"
+                "1. **Extracción y Parseo:** Usa el módulo `multimodal-doc-parser` para convertir PDFs o imágenes a Markdown estructurado utilizando modelos VLM.\n"
+                "2. **Segmentación:** Fragmenta el texto con el módulo `semantic-chunking-engine` para obtener chunks basados en similitud semántica.\n"
+                "3. **Entrenamiento y Embeddings:** Pasa los chunks por el codificador de `contrastive-embedding-trainer` para generar sus vectores representativos.\n"
+                "4. **Almacenamiento e Indexación:** Inserta los vectores en la base de datos `nano-vector-db` configurada con índice HNSW para habilitar búsquedas ultra-rápidas."
+            )
+        elif any(w in lower_prompt for w in ["vector", "hnsw", "db", "almacenar", "base de datos"]):
+            summary += (
+                "Para interactuar con la base de datos vectorial del proyecto:\n"
+                "1. Crea una base de datos con `db = NanoVectorDB(dimension=64, index_type='hnsw')`.\n"
+                "2. Agrega vectores llamando a `db.insert(id=doc_id, vector=vector_float, metadata=meta_dict)`.\n"
+                "3. Realiza búsquedas aproximadas de vecinos más cercanos (ANN) usando `db.query(vector=query_vector, top_k=3)`."
+            )
+        elif any(w in lower_prompt for w in ["chunk", "semantic", "segmentar", "fragmentar"]):
+            summary += (
+                "El módulo `semantic-chunking-engine` segmenta textos analizando la distancia coseno entre oraciones adyacentes.\n"
+                "Configura una instancia con un umbral dinámico (media + threshold * desviación estándar) para agrupar oraciones en párrafos sin romper la coherencia semántica."
+            )
+        elif any(w in lower_prompt for w in ["guardrail", "seguridad", "proteg", "filtra"]):
+            summary += (
+                "Para proteger tu aplicación:\n"
+                "1. Instancia el escudo con `shield = LLMGuardrailsShield()`.\n"
+                "2. Llama a `shield.validate_input(prompt)` para filtrar inyecciones, jailbreaks y anonimizar teléfonos/emails.\n"
+                "3. Valida las salidas generadas mediante `shield.validate_output(response, context)` para evitar alucinaciones."
+            )
+        else:
+            summary += (
+                "He recuperado la información relevante sobre este tema del repositorio. "
+                "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados arriba."
+            )
     else:
         summary += (
-            f"El pipeline hibrido orquestado ha recuperado con exito la informacion relevante de PROJECTS.md.\n"
-            f"La consulta '{prompt_clean}' se ha resuelto integrando todas las capas lógicas (Guardrails, "
-            f"Model Router, Embeddings, Hybrid Search, Reranking, Memory y Runtime)."
+            "No se han encontrado fragmentos específicos en PROJECTS.md relacionados directamente con tu consulta.\n\n"
+            "Por favor, intenta preguntar acerca de conceptos específicos del proyecto como 'NanoVectorDB', 'Semantic Chunker', 'Guardrails', 'ReAct Agents' o 'Embeddings'."
         )
         
     return summary
+
 
 @app.post("/api/pipeline/run")
 async def api_pipeline_run(req: UnifiedPipelineRequest):
