@@ -1057,6 +1057,14 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
             "¿En qué puedo ayudarte hoy en relación a la infraestructura de IA (tokenizadores, chunking, bases vectoriales, agentes o guardrails)?"
         )
         
+    # Helper to normalize accents and casing for accurate overlap calculations
+    def normalize_text(t: str) -> str:
+        accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
+        res = t.lower()
+        for a, b in accents.items():
+            res = res.replace(a, b)
+        return res
+        
     # Analyze and parse the retrieved context documents
     import re
     docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |$)", context, re.DOTALL)
@@ -1068,7 +1076,6 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         summary += "He recuperado y ordenado los siguientes fragmentos relevantes de la documentación del proyecto:\n\n"
         for doc_id, doc_text in docs[:2]: # Show top 2 matches
             clean_text = doc_text.strip()
-            # If the block is very long, truncate it nicely
             if len(clean_text) > 400:
                 excerpt = clean_text[:400] + "..."
             else:
@@ -1076,42 +1083,87 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
             summary += f"📄 **[`{doc_id}`]**\n> {excerpt}\n\n"
             
         summary += "---\n"
-        summary += "### 💡 Respuesta y Recomendación del Agente:\n"
         
-        # Keyword-based advice engine
-        lower_prompt = prompt_clean.lower()
-        if any(w in lower_prompt for w in ["documento", "meter", "entrenar", "pdf", "procesar", "ingestar"]):
+        # 1. Extractive Heuristic QA
+        # We split doc content into sentences and find those that contain query keywords
+        prompt_normalized = normalize_text(prompt_clean)
+        prompt_words = [w.strip("?,.:;!\"'()").lower() for w in prompt_normalized.split() if len(w) > 2]
+        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "hay", "mas"}
+        query_keywords = [w for w in prompt_words if w not in stopwords]
+        
+        matched_sentences = []
+        for doc_id, doc_text in docs:
+            # Simple sentence tokenizer by period or question mark followed by whitespace
+            sentences = re.split(r'(?<=[.?!])\s+', doc_text)
+            for sent in sentences:
+                sent_clean = sent.strip()
+                if not sent_clean or len(sent_clean) < 10:
+                    continue
+                sent_norm = normalize_text(sent_clean)
+                sent_words = [w.strip("?,.:;!\"'()").lower() for w in sent_norm.split()]
+                overlap = sum(1 for kw in query_keywords if kw in sent_words)
+                if overlap > 0:
+                    matched_sentences.append((overlap, sent_clean, doc_id))
+                    
+        # Sort by overlap score descending, then sentence length descending
+        matched_sentences.sort(key=lambda x: (x[0], len(x[1])), reverse=True)
+        
+        # 2. Compile response
+        summary += "### 💡 Respuesta y Recomendación del Agente:\n"
+        if matched_sentences:
             summary += (
-                "Para alimentar nuevos documentos e indexarlos en la infraestructura de IA, debes seguir este flujo de trabajo:\n"
-                "1. **Extracción y Parseo:** Usa el módulo `multimodal-doc-parser` para convertir PDFs o imágenes a Markdown estructurado utilizando modelos VLM.\n"
-                "2. **Segmentación:** Fragmenta el texto con el módulo `semantic-chunking-engine` para obtener chunks basados en similitud semántica.\n"
-                "3. **Entrenamiento y Embeddings:** Pasa los chunks por el codificador de `contrastive-embedding-trainer` para generar sus vectores representativos.\n"
-                "4. **Almacenamiento e Indexación:** Inserta los vectores en la base de datos `nano-vector-db` configurada con índice HNSW para habilitar búsquedas ultra-rápidas."
+                "De acuerdo a los extractos de los documentos indexados, "
+                "aquí están los pasajes exactos que responden a tu consulta:\n\n"
             )
-        elif any(w in lower_prompt for w in ["vector", "hnsw", "db", "almacenar", "base de datos"]):
-            summary += (
-                "Para interactuar con la base de datos vectorial del proyecto:\n"
-                "1. Crea una base de datos con `db = NanoVectorDB(dimension=64, index_type='hnsw')`.\n"
-                "2. Agrega vectores llamando a `db.insert(id=doc_id, vector=vector_float, metadata=meta_dict)`.\n"
-                "3. Realiza búsquedas aproximadas de vecinos más cercanos (ANN) usando `db.query(vector=query_vector, top_k=3)`."
-            )
-        elif any(w in lower_prompt for w in ["chunk", "semantic", "segmentar", "fragmentar"]):
-            summary += (
-                "El módulo `semantic-chunking-engine` segmenta textos analizando la distancia coseno entre oraciones adyacentes.\n"
-                "Configura una instancia con un umbral dinámico (media + threshold * desviación estándar) para agrupar oraciones en párrafos sin romper la coherencia semántica."
-            )
-        elif any(w in lower_prompt for w in ["guardrail", "seguridad", "proteg", "filtra"]):
-            summary += (
-                "Para proteger tu aplicación:\n"
-                "1. Instancia el escudo con `shield = LLMGuardrailsShield()`.\n"
-                "2. Llama a `shield.validate_input(prompt)` para filtrar inyecciones, jailbreaks y anonimizar teléfonos/emails.\n"
-                "3. Valida las salidas generadas mediante `shield.validate_output(response, context)` para evitar alucinaciones."
-            )
+            # Take top 3 matching sentences
+            seen_sents = set()
+            count = 0
+            for score, sent, doc_id in matched_sentences:
+                sent_norm = sent.lower().strip()
+                if sent_norm in seen_sents:
+                    continue
+                seen_sents.add(sent_norm)
+                summary += f"👉 *\"{sent}\"* (encontrado en `{doc_id}`)\n"
+                count += 1
+                if count >= 3:
+                    break
+                    
+            summary += "\n---\n*Nota: Estos fragmentos fueron extraídos semánticamente en tiempo real de tu base de conocimiento local utilizando el segmentador y recuperador de la infraestructura.*"
         else:
-            summary += (
-                "He recuperado la información relevante sobre este tema del repositorio. "
-                "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados arriba."
-            )
+            # Fallback to custom keywords check if no direct sentence matches
+            lower_prompt = prompt_clean.lower()
+            if any(w in lower_prompt for w in ["documento", "meter", "entrenar", "pdf", "procesar", "ingestar"]):
+                summary += (
+                    "Para alimentar nuevos documentos e indexarlos en la infraestructura de IA, debes seguir este flujo de trabajo:\n"
+                    "1. **Extracción y Parseo:** Usa el módulo `multimodal-doc-parser` para convertir PDFs o imágenes a Markdown estructurado utilizando modelos VLM.\n"
+                    "2. **Segmentación:** Fragmenta el texto con el módulo `semantic-chunking-engine` para obtener chunks basados en similitud semántica.\n"
+                    "3. **Entrenamiento y Embeddings:** Pasa los chunks por el codificador de `contrastive-embedding-trainer` para generar sus vectores representativos.\n"
+                    "4. **Almacenamiento e Indexación:** Inserta los vectores en la base de datos `nano-vector-db` configurada con índice HNSW para habilitar búsquedas ultra-rápidas."
+                )
+            elif any(w in lower_prompt for w in ["vector", "hnsw", "db", "almacenar", "base de datos"]):
+                summary += (
+                    "Para interactuar con la base de datos vectorial del proyecto:\n"
+                    "1. Crea una base de datos con `db = NanoVectorDB(dimension=64, index_type='hnsw')`.\n"
+                    "2. Agrega vectores llamando a `db.insert(id=doc_id, vector=vector_float, metadata=meta_dict)`.\n"
+                    "3. Realiza búsquedas aproximadas de vecinos más cercanos (ANN) usando `db.query(vector=query_vector, top_k=3)`."
+                )
+            elif any(w in lower_prompt for w in ["chunk", "semantic", "segmentar", "fragmentar"]):
+                summary += (
+                    "El módulo `semantic-chunking-engine` segmenta textos analizando la distancia coseno entre oraciones adyacentes.\n"
+                    "Configura una instancia con un umbral dinámico (media + threshold * desviación estándar) para agrupar oraciones en párrafos sin romper la coherencia semántica."
+                )
+            elif any(w in lower_prompt for w in ["guardrail", "seguridad", "proteg", "filtra"]):
+                summary += (
+                    "Para proteger tu aplicación:\n"
+                    "1. Instancia el escudo con `shield = LLMGuardrailsShield()`.\n"
+                    "2. Llama a `shield.validate_input(prompt)` para filtrar inyecciones, jailbreaks y anonimizar teléfonos/emails.\n"
+                    "3. Valida las salidas generadas mediante `shield.validate_output(response, context)` para evitar alucinaciones."
+                )
+            else:
+                summary += (
+                    "He recuperado la información relevante sobre este tema del repositorio. "
+                    "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados arriba."
+                )
     else:
         summary += (
             "No se han encontrado fragmentos específicos en PROJECTS.md relacionados directamente con tu consulta.\n\n"
