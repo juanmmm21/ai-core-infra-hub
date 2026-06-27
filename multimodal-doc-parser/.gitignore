@@ -1,0 +1,21 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments and API Keys
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Local outputs and temporaries
+output_*.md
+*.output
+temp_page_*.png
