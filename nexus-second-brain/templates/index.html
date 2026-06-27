@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Second Brain - Ecosistema de Infraestructura de IA</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js para el Grafo de Conocimiento -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #070913;
+            --panel-bg: rgba(15, 23, 42, 0.75);
+            --border-glow: rgba(139, 92, 246, 0.25);
+            --violet-glow: #8b5cf6;
+            --violet-light: #a78bfa;
+            --rose-glow: #f43f5e;
+            --blue-glow: #3b82f6;
+            --text-main: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: radial-gradient(circle at 20% 30%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.05) 0%, transparent 50%);
+        }
+
+        /* HEADER */
+        .app-header {
+            height: 60px;
+            background: rgba(10, 15, 30, 0.85);
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 25px;
+            backdrop-filter: blur(8px);
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, var(--violet-light), #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* LAYOUT PRINCIPAL */
+        .main-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+
+        /* PANEL IZQUIERDO: NOTAS */
+        .sidebar {
+            width: 320px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-glow);
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--violet-light);
+            margin-top: 0;
+            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: var(--text-main);
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            border-color: var(--violet-glow);
+            box-shadow: 0 0 8px rgba(139, 92, 246, 0.3);
+        }
+
+        textarea {
+            height: 120px;
+            resize: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--violet-glow), #d946ef);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 12px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            width: 100%;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .notes-list-container {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 15px;
+        }
+
+        .note-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .note-card:hover {
+            background: rgba(139, 92, 246, 0.05);
+            border-color: rgba(139, 92, 246, 0.2);
+        }
+
+        .note-card-title {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .note-card-excerpt {
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* AREA CENTRAL: TABS (GRAFO Y CHAT) */
+        .center-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(5, 7, 15, 0.4);
+            position: relative;
+        }
+
+        .tabs-header {
+            height: 45px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            padding: 0 20px;
+            background: rgba(10, 15, 30, 0.4);
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0 20px;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            color: var(--violet-light);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: var(--violet-glow);
+            box-shadow: 0 0 8px var(--violet-glow);
+        }
+
+        .tab-content {
+            flex: 1;
+            position: relative;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* GRAFO VISUALIZER */
+        #graph-svg {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            cursor: grab;
+        }
+
+        #graph-svg:active {
+            cursor: grabbing;
+        }
+
+        /* CHAT INTERACTIVO */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-sizing: border-box;
+            padding: 20px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message-bubble {
+            max-width: 75%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .message-bubble.user {
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: var(--text-main);
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message-bubble.agent {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: var(--text-main);
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            height: 42px;
+        }
+
+        .chat-input-area .btn {
+            width: 100px;
+            height: 42px;
+            padding: 0;
+        }
+
+        /* PANEL DERECHO: OBSERVABILIDAD TELEMETRICA */
+        .observability-panel {
+            width: 380px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-glow);
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .flame-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            margin-top: 15px;
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .telemetry-header-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .telemetry-stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .telemetry-stat-lbl {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .telemetry-stat-val {
+            font-size: 14px;
+            font-weight: 700;
+            color: #d946ef;
+            margin-top: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .span-row {
+            position: relative;
+            height: 28px;
+            margin-bottom: 5px;
+            background: rgba(255, 255, 255, 0.01);
+            border-radius: 3px;
+        }
+
+        .span-bar {
+            position: absolute;
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #6366f1, #a855f7);
+            border: 1px solid #818cf8;
+            box-sizing: border-box;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 10px;
+            font-weight: 500;
+            color: #fff;
+            transition: filter 0.2s;
+        }
+
+        .span-bar:hover {
+            filter: brightness(1.2);
+        }
+
+        .span-bar.error-bar {
+            background: linear-gradient(90deg, #ef4444, #f97316);
+            border-color: #f87171;
+        }
+
+        /* DETALLES DEL SPAN SELECCIONADO */
+        .span-detail-overlay {
+            margin-top: 15px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .span-detail-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--violet-light);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+        }
+
+        .span-detail-pre {
+            background: #090d16;
+            border: 1px solid rgba(255,255,255,0.03);
+            border-radius: 4px;
+            padding: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #38bdf8;
+            overflow-x: auto;
+            max-height: 150px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="app-header">
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--violet-glow);"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+            NEXUS SECOND BRAIN
+        </div>
+        <div class="status-badge">Ecosistema AI-Core-Infra Conectado</div>
+    </header>
+
+    <!-- LAYOUT PRINCIPAL -->
+    <div class="main-container">
+        
+        <!-- SIDEBAR IZQUIERDO: NOTAS -->
+        <aside class="sidebar">
+            <h2>Crear Nota Semántica</h2>
+            
+            <div class="input-group">
+                <label for="note-title">Título de la Nota</label>
+                <input type="text" id="note-title" placeholder="Ej: Aprendizaje de QLoRA">
+            </div>
+            
+            <div class="input-group">
+                <label for="note-content">Contenido</label>
+                <textarea id="note-content" placeholder="Escribe tus notas. Los conceptos claves alimentarán el grafo automáticamente..."></textarea>
+            </div>
+            
+            <button class="btn" onclick="saveNote()">Procesar y Guardar Nota</button>
+            
+            <div class="notes-list-container">
+                <h2>Cerebro Digital (Notas)</h2>
+                <div id="notes-list"></div>
+            </div>
+        </aside>
+
+        <!-- AREA CENTRAL: TABS (GRAFO O CHAT) -->
+        <main class="center-panel">
+            <div class="tabs-header">
+                <button class="tab-btn active" id="tab-btn-graph" onclick="switchTab('graph')">Mapa del Grafo</button>
+                <button class="tab-btn" id="tab-btn-chat" onclick="switchTab('chat')">Agente Inteligente Chat</button>
+            </div>
+            
+            <!-- CONTENIDO GRAFO -->
+            <div class="tab-content active" id="tab-graph">
+                <svg id="graph-svg"></svg>
+            </div>
+            
+            <!-- CONTENIDO CHAT -->
+            <div class="tab-content" id="tab-chat">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-feed">
+                        <div class="message-bubble agent">
+                            Hola. Soy tu agente autónomo conectado al cerebro digital. ¿Qué deseas consultar sobre tus notas o infraestructura?
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <input type="text" id="chat-input" placeholder="Pregunta algo al agente autónomo..." onkeydown="if(event.key === 'Enter') sendChatMessage()">
+                        <button class="btn" onclick="sendChatMessage()">Preguntar</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- PANEL DERECHO: OBSERVABILIDAD TELEMETRICA -->
+        <section class="observability-panel">
+            <h2>Telemetría en Vivo (Observabilidad)</h2>
+            <div class="telemetry-header-stats" id="telemetry-stats">
+                <div class="telemetry-stat-card">
+                    <div class="telemetry-stat-lbl">Latencia</div>
+                    <div class="telemetry-stat-val" id="stat-latency">0.00 ms</div>
+                </div>
+                <div class="telemetry-stat-card">
+                    <div class="telemetry-stat-lbl">Coste</div>
+                    <div class="telemetry-stat-val" id="stat-cost">$0.000000</div>
+                </div>
+            </div>
+            
+            <div class="flame-container">
+                <h3 style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-secondary); text-transform: uppercase;">Línea temporal de ejecución (Flame Graph)</h3>
+                <div id="flamegraph-body">
+                    <div style="font-size:12px; color: var(--text-secondary); text-align:center; padding: 30px 0;">No se han ejecutado operaciones aún.</div>
+                </div>
+            </div>
+            
+            <!-- DETALLES DE SPANS -->
+            <div class="span-detail-overlay" id="span-detail-panel">
+                <div class="span-detail-title" id="detail-span-name">Nombre del Span</div>
+                <div style="font-size: 11px; margin-bottom: 8px;">
+                    <strong>Duración:</strong> <span id="detail-span-duration">0.00</span> ms<br>
+                    <strong>Coste:</strong> <span id="detail-span-cost">$0.000000</span> | 
+                    <strong>Tokens:</strong> <span id="detail-span-tokens">In: 0 | Out: 0</span>
+                </div>
+                <div style="font-size:11px; font-weight:600; margin-bottom:4px;">Argumentos de Entrada (Inputs):</div>
+                <pre class="span-detail-pre" id="detail-span-inputs"></pre>
+                <div style="font-size:11px; font-weight:600; margin-top:8px; margin-bottom:4px;">Salidas (Outputs) / Errores:</div>
+                <pre class="span-detail-pre" id="detail-span-outputs" style="color: #4ade80;"></pre>
+            </div>
+        </section>
+        
+    </div>
+
+    <!-- CONTROLADORES LÓGICOS SPA -->
+    <script>
+        let currentTab = 'graph';
+        let graphData = { nodes: [], links: [] };
+        let simulation = null;
+
+        // Carga inicial
+        window.onload = function() {
+            loadNotes();
+            loadGraph();
+            loadTelemetry();
+        };
+
+        // Switch Tabs
+        function switchTab(tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            if (tabName === 'graph') {
+                loadGraph(); // Recargar fuerzas D3
+            }
+        }
+
+        // --- NOTAS API ---
+        async function loadNotes() {
+            try {
+                const res = await fetch('/api/notes');
+                const notes = await res.json();
+                const list = document.getElementById('notes-list');
+                list.innerHTML = '';
+                
+                notes.forEach(note => {
+                    const card = document.createElement('div');
+                    card.className = 'note-card';
+                    card.onclick = () => {
+                        document.getElementById('note-title').value = note.title;
+                        document.getElementById('note-content').value = note.content;
+                    };
+                    card.innerHTML = `
+                        <div class="note-card-title">${note.title}</div>
+                        <div class="note-card-excerpt">${note.content}</div>
+                    `;
+                    list.appendChild(card);
+                });
+            } catch (err) {
+                console.error("Error al cargar notas:", err);
+            }
+        }
+
+        async function saveNote() {
+            const titleInput = document.getElementById('note-title');
+            const contentInput = document.getElementById('note-content');
+            
+            const title = titleInput.value.trim();
+            const content = contentInput.value.trim();
+            
+            if (!title || !content) {
+                alert("Por favor rellene el titulo y contenido.");
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content })
+                });
+                
+                if (res.ok) {
+                    titleInput.value = '';
+                    contentInput.value = '';
+                    loadNotes();
+                    loadGraph();
+                    // Refrescar telemetría inmediatamente
+                    setTimeout(loadTelemetry, 200);
+                } else {
+                    const err = await res.json();
+                    alert("Error en procesamiento: " + err.detail);
+                }
+            } catch (err) {
+                console.error("Error al guardar nota:", err);
+            }
+        }
+
+        // --- GRAFO D3.JS ---
+        async function loadGraph() {
+            try {
+                const res = await fetch('/api/graph');
+                graphData = await res.json();
+                renderGraph();
+            } catch (err) {
+                console.error("Error al cargar grafo:", err);
+            }
+        }
+
+        function renderGraph() {
+            const svg = d3.select("#graph-svg");
+            svg.selectAll("*").remove(); // Limpiar previo
+            
+            const width = document.getElementById('tab-graph').clientWidth;
+            const height = document.getElementById('tab-graph').clientHeight;
+            
+            // Zoom behavior
+            const g = svg.append("g");
+            svg.call(d3.zoom().on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            }));
+
+            // Fuerzas de D3
+            simulation = d3.forceSimulation(graphData.nodes)
+                .force("link", d3.forceLink(graphData.links).id(d => d.id).distance(80))
+                .force("charge", d3.forceManyBody().strength(-100))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(25));
+
+            // Dibujar enlaces (links)
+            const link = g.append("g")
+                .attr("stroke", "rgba(255,255,255,0.08)")
+                .attr("stroke-width", 1.5)
+                .selectAll("line")
+                .data(graphData.links)
+                .join("line");
+
+            // Dibujar nodos
+            const node = g.append("g")
+                .selectAll("g")
+                .data(graphData.nodes)
+                .join("g")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            // Círculos coloreados con brillos
+            node.append("circle")
+                .attr("r", d => d.val || 8)
+                .attr("fill", d => {
+                    if (d.type === 'root') return 'var(--violet-glow)';
+                    if (d.type === 'note') return 'var(--rose-glow)';
+                    return 'var(--blue-glow)';
+                })
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1)
+                .style("filter", "drop-shadow(0px 0px 4px rgba(139,92,246,0.6))");
+
+            // Texto etiquetas
+            node.append("text")
+                .text(d => d.id)
+                .attr("x", 12)
+                .attr("y", 4)
+                .style("fill", "rgba(255,255,255,0.85)")
+                .style("font-size", "11px")
+                .style("font-weight", "500")
+                .style("pointer-events", "none");
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("transform", d => `translate(${d.x}, ${d.y})`);
+            });
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        // --- AGENTE CHAT ---
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            input.value = '';
+            
+            // Añadir mensaje de usuario al feed
+            const feed = document.getElementById('chat-feed');
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message-bubble user';
+            userMsg.innerText = message;
+            feed.appendChild(userMsg);
+            
+            // Crear burbuja vacía para el agente
+            const agentMsg = document.createElement('div');
+            agentMsg.className = 'message-bubble agent';
+            agentMsg.innerText = 'Pensando...';
+            feed.appendChild(agentMsg);
+            feed.scrollTop = feed.scrollHeight;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                
+                if (!response.ok) {
+                    agentMsg.innerText = "Error: consulta bloqueada por inyección de API Keys.";
+                    agentMsg.style.color = '#f87171';
+                    setTimeout(loadTelemetry, 200);
+                    return;
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                agentMsg.innerText = ''; // Borrar el pensando
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6).trim();
+                            if (data === '[START]') {
+                                agentMsg.innerText = '';
+                            } else if (data === '[DONE]') {
+                                // Finalizado
+                            } else {
+                                agentMsg.innerText += data;
+                            }
+                        }
+                    }
+                    feed.scrollTop = feed.scrollHeight;
+                }
+                
+                // Cargar telemetría resultante tras finalizar
+                setTimeout(loadTelemetry, 300);
+                
+            } catch (err) {
+                console.error("Error en chat:", err);
+                agentMsg.innerText = "Ocurrió un error en la conexión.";
+            }
+        }
+
+        // --- OBSERVABILIDAD (TELEMETRÍA) ---
+        async function loadTelemetry() {
+            try {
+                const res = await fetch('/api/telemetry');
+                const trace = await res.json();
+                renderTelemetry(trace);
+            } catch (err) {
+                console.error("Error al cargar telemetría:", err);
+            }
+        }
+
+        function renderTelemetry(trace) {
+            const body = document.getElementById('flamegraph-body');
+            const statLatency = document.getElementById('stat-latency');
+            const statCost = document.getElementById('stat-cost');
+            
+            if (!trace || trace.length === 0) {
+                body.innerHTML = '<div style="font-size:12px; color: var(--text-secondary); text-align:center; padding: 30px 0;">No se han ejecutado operaciones aún.</div>';
+                statLatency.innerText = '0.00 ms';
+                statCost.innerText = '$0.000000';
+                return;
+            }
+            
+            // Escaneo de límites temporales
+            let minTime = Infinity;
+            let maxTime = -Infinity;
+            let totalCost = 0.0;
+            
+            function scanTimes(span) {
+                if (span.start_time < minTime) minTime = span.start_time;
+                if (span.end_time && span.end_time > maxTime) maxTime = span.end_time;
+                if (span.metadata && span.metadata.cost) {
+                    totalCost += span.metadata.cost;
+                }
+                span.children.forEach(scanTimes);
+            }
+            trace.forEach(scanTimes);
+            
+            const totalDuration = maxTime - minTime;
+            statLatency.innerText = `${(totalDuration * 1000).toFixed(2)} ms`;
+            statCost.innerText = `$${totalCost.toFixed(6)}`;
+            
+            // Generar Flame Graph HTML bars
+            function buildBarHTML(span) {
+                const startOffset = span.start_time - minTime;
+                const duration = (span.end_time || span.start_time) - span.start_time;
+                
+                const leftPercent = totalDuration > 0 ? (startOffset / totalDuration * 100) : 0;
+                const widthPercent = totalDuration > 0 ? (duration / totalDuration * 100) : 100;
+                
+                const isError = span.error ? 'error-bar' : '';
+                const durationMs = (duration * 1000).toFixed(2);
+                
+                const spanStr = JSON.stringify(span).replace(/'/g, "&apos;");
+                
+                let html = `
+                    <div class="span-row">
+                        <div class="span-bar ${isError}" 
+                             style="left: ${leftPercent}%; width: ${widthPercent}%;"
+                             onclick='showSpanDetail(${spanStr})'>
+                             ${span.name} (${durationMs}ms)
+                        </div>
+                    </div>
+                `;
+                
+                span.children.forEach(child => {
+                    html += buildBarHTML(child);
+                });
+                
+                return html;
+            }
+            
+            let graphHTML = '';
+            trace.forEach(root => {
+                graphHTML += buildBarHTML(root);
+            });
+            body.innerHTML = graphHTML;
+        }
+
+        function showSpanDetail(span) {
+            const panel = document.getElementById('span-detail-panel');
+            panel.style.display = 'block';
+            
+            document.getElementById('detail-span-name').innerText = "Span: " + span.name;
+            const duration = ((span.end_time || span.start_time) - span.start_time) * 1000;
+            document.getElementById('detail-span-duration').innerText = duration.toFixed(2);
+            
+            const cost = span.metadata?.cost || 0.0;
+            document.getElementById('detail-span-cost').innerText = "$" + cost.toFixed(6);
+            
+            const inTok = span.metadata?.input_tokens || 0;
+            const outTok = span.metadata?.output_tokens || 0;
+            document.getElementById('detail-span-tokens').innerText = `In: ${inTok} | Out: ${outTok}`;
+            
+            document.getElementById('detail-span-inputs').innerText = JSON.stringify(span.inputs, null, 2);
+            
+            const outBox = document.getElementById('detail-span-outputs');
+            if (span.error) {
+                outBox.innerText = span.error;
+                outBox.style.color = '#f87171';
+            } else {
+                outBox.innerText = JSON.stringify(span.outputs, null, 2);
+                outBox.style.color = '#4ade80';
+            }
+        }
+    </script>
+</body>
+</html>
