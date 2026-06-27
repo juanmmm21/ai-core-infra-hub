@@ -1052,8 +1052,18 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         f"Respuesta Consolidada:\n"
     )
     
-    # Smart classification based on prompt keywords
-    if "vector" in prompt_clean.lower() or "hnsw" in prompt_clean.lower():
+    # Conversational greetings check
+    greetings = ["hola", "que tal", "buenos dias", "buenos días", "buenas tardes", "buenas noches", "hello", "hi"]
+    is_greeting = any(g in prompt_clean.lower() for g in greetings)
+    
+    if is_greeting:
+        summary += (
+            "¡Hola! ¿Cómo estás? Soy el asistente virtual del AI Core Infra Hub.\n"
+            "He procesado tu saludo y veo que es una consulta de baja complejidad. "
+            "El enrutador semántico me ha asignado un modelo rápido y económico (como gpt-4o-mini) para responderte.\n"
+            "¿En qué puedo ayudarte hoy en relación a la infraestructura de IA (tokenizadores, chunking, bases vectoriales, agentes o guardrails)?"
+        )
+    elif "vector" in prompt_clean.lower() or "hnsw" in prompt_clean.lower():
         summary += (
             "NanoVectorDB es una base de datos vectorial in-memory escrita en Python "
             "que implementa indexacion HNSW y similitud de coseno. Permite busquedas de "
