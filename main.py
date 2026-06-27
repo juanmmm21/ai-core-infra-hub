@@ -208,12 +208,16 @@ except ImportError:
         def validate_input(self, prompt: str) -> Tuple[bool, str, str]:
             # Redact basic phone numbers
             clean = prompt
-            phone_pattern = r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b'
+            phone_pattern = r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{3}[-.\s]?\d{3,4}\b"
             if re.search(phone_pattern, prompt):
-                clean = re.sub(phone_pattern, "[REDACTED_PHONE]", prompt)
+                clean = re.sub(phone_pattern, "[PHONE]", prompt)
             
             # Simulated prompt injection check
-            injection_patterns = ["ignore prior instructions", "delete database", "drop table"]
+            injection_patterns = [
+                "ignore prior instructions", "delete database", "drop table",
+                "elimina la base de datos", "elimina toda la base de datos",
+                "borra la base de datos", "ignora las instrucciones"
+            ]
             for pat in injection_patterns:
                 if pat in prompt.lower():
                     return False, clean, f"Blocked: injection pattern '{pat}' detected (Simulado)"
