@@ -1,6 +1,4 @@
-A centralized, interactive web control panel and showcase hub integrating and orchestrating all 21 AI Core Infrastructure subprojects.
 
----
 
 ## Descripcion Tecnica y Alcance
 
