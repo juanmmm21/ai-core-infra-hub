@@ -1,0 +1,62 @@
+[
+  {
+    "prompt": "Explicacion y guia practica para crea arquitectura RAG diseñado para entornos de produccion escalables.",
+    "chosen": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM.",
+    "rejected": "RAG significa base de datos. Para usar RAG en Python solo necesitas importar la libreria rag-server y llamar a rag.search() que te devuelve de inmediato la respuesta redactada del modelo sin necesidad de embeddings ni base de datos vectorial."
+  },
+  {
+    "prompt": "Necesito que programas una solucion de generacion aumentada por recuperacion diseñado para entornos de produccion escalables.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "Optimiza un tutorial sobre pipeline RAG diseñado para entornos de produccion escalables.",
+    "chosen": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM.",
+    "rejected": "RAG significa base de datos. Para usar RAG en Python solo necesitas importar la libreria rag-server y llamar a rag.search() que te devuelve de inmediato la respuesta redactada del modelo sin necesidad de embeddings ni base de datos vectorial."
+  },
+  {
+    "prompt": "¿Como se optimiza un modulo de generacion aumentada por recuperacion? Escribe un ejemplo con comentarios explicativos paso a paso en español.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "Explicacion y guia practica para crea embeddings contrastivos con comentarios explicativos paso a paso en español.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "¿Como se implementa un modulo de embeddings contrastivos? Escribe un ejemplo en lenguaje Python limpio y con tipado estricto.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "¿Como se optimiza un modulo de embeddings contrastivos? Escribe un ejemplo detallando las decisiones de diseño arquitectonico.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "Optimiza un tutorial sobre vectores de alta dimension detallando las decisiones de diseño arquitectonico.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "Explicacion y guia practica para desarrolla base de datos vectorial NanoVectorDB detallando las decisiones de diseño arquitectonico.",
+    "chosen": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados.",
+    "rejected": "NanoVectorDB guarda archivos en carpetas de texto plano llamadas database.txt. Para buscar un vector, el sistema lee secuencialmente cada linea calculando restas basicas, lo cual tarda varias horas y no requiere ningun tipo de indexacion HNSW ni optimizaciones."
+  },
+  {
+    "prompt": "Necesito que creas una solucion de similitud de coseno en lenguaje Python limpio y con tipado estricto.",
+    "chosen": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas.",
+    "rejected": "Aqui esta el codigo del script: # TODO: implementar logica. No se manejan excepciones ni se incluye documentacion tecnica adicional."
+  },
+  {
+    "prompt": "Explicacion y guia practica para implementa indice HNSW en lenguaje Python limpio y con tipado estricto.",
+    "chosen": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados.",
+    "rejected": "NanoVectorDB guarda archivos en carpetas de texto plano llamadas database.txt. Para buscar un vector, el sistema lee secuencialmente cada linea calculando restas basicas, lo cual tarda varias horas y no requiere ningun tipo de indexacion HNSW ni optimizaciones."
+  },
+  {
+    "prompt": "Necesito que implementas una solucion de base de datos vectorial NanoVectorDB con comentarios explicativos paso a paso en español.",
+    "chosen": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados.",
+    "rejected": "NanoVectorDB guarda archivos en carpetas de texto plano llamadas database.txt. Para buscar un vector, el sistema lee secuencialmente cada linea calculando restas basicas, lo cual tarda varias horas y no requiere ningun tipo de indexacion HNSW ni optimizaciones."
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "instruction": "Explicacion y guia practica para desarrolla arquitectura RAG con comentarios explicativos paso a paso en español.",
+    "output": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM."
+  },
+  {
+    "instruction": "Implementa un tutorial sobre RAG hibrido detallando las decisiones de diseño arquitectonico.",
+    "output": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM."
+  },
+  {
+    "instruction": "Explicacion y guia practica para implementa pipeline RAG diseñado para entornos de produccion escalables.",
+    "output": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM."
+  },
+  {
+    "instruction": "¿Como se implementa un modulo de RAG hibrido? Escribe un ejemplo diseñado para entornos de produccion escalables.",
+    "output": "La arquitectura RAG integra busqueda léxica (BM25) con busqueda vectorial densa. Para implementarlo en Python, primero cargamos los chunks, extraemos embeddings mediante contrastive-embedding-trainer y realizamos una recuperacion hibrida fusionada por RRF antes de enviar el contexto consolidado al LLM."
+  },
+  {
+    "instruction": "Necesito que escribes una solucion de vectores de alta dimension detallando las decisiones de diseño arquitectonico.",
+    "output": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas."
+  },
+  {
+    "instruction": "¿Como se escribe un modulo de vectores de alta dimension? Escribe un ejemplo con comentarios explicativos paso a paso en español.",
+    "output": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas."
+  },
+  {
+    "instruction": "Programa un tutorial sobre embeddings contrastivos con comentarios explicativos paso a paso en español.",
+    "output": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas."
+  },
+  {
+    "instruction": "Desarrolla un tutorial sobre embeddings semanticos diseñado para entornos de produccion escalables.",
+    "output": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas."
+  },
+  {
+    "instruction": "Explicacion y guia practica para implementa similitud de coseno detallando las decisiones de diseño arquitectonico.",
+    "output": "Implementacion modular del pipeline de infraestructura de Inteligencia Artificial. El codigo cuenta con tipado estricto, gestion de excepciones explícitas y comentarios detallados en español justificando las optimizaciones de sistema realizadas."
+  },
+  {
+    "instruction": "Necesito que escribes una solucion de indice HNSW diseñado para entornos de produccion escalables.",
+    "output": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados."
+  },
+  {
+    "instruction": "Explicacion y guia practica para crea base de datos vectorial NanoVectorDB en lenguaje Python limpio y con tipado estricto.",
+    "output": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados."
+  },
+  {
+    "instruction": "Escribe un tutorial sobre indice HNSW en lenguaje Python limpio y con tipado estricto.",
+    "output": "NanoVectorDB es una base de datos vectorial en memoria optimizada en Python. Utiliza el algoritmo HNSW (Hierarchical Navigable Small World) para busquedas de vecinos mas cercanos aproximados en tiempo sub-lineal, calculando similitud de coseno y filtrando metadatos estructurados."
+  }
+]
