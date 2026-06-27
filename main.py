@@ -1057,7 +1057,6 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
             "¿En qué puedo ayudarte hoy en relación a la infraestructura de IA (tokenizadores, chunking, bases vectoriales, agentes o guardrails)?"
         )
         
-    # Helper to normalize accents and casing for accurate overlap calculations
     def normalize_text(t: str) -> str:
         accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
         res = t.lower()
@@ -1065,75 +1064,86 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
             res = res.replace(a, b)
         return res
         
+    def clean_slide_text(text: str) -> str:
+        lines = text.split("\n")
+        cleaned_lines = []
+        noise_keywords = [
+            "universidad de jaen", 
+            "area de ingenieria telematica", 
+            "dto. ingenieria de telecomunicacion",
+            "dto. ingenieria de computadores",
+            "departamento de",
+            "telematica"
+        ]
+        for line in lines:
+            line_strip = line.strip()
+            if not line_strip:
+                continue
+            if re.match(r'^\d+\.?$', line_strip):
+                continue
+            line_lower = line_strip.lower()
+            if any(nk in line_lower for nk in noise_keywords):
+                continue
+            cleaned_lines.append(line_strip)
+        return "\n".join(cleaned_lines)
+        
     # Analyze and parse the retrieved context documents
     import re
     docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |$)", context, re.DOTALL)
     
-    summary = f"Procesando consulta: '{prompt_clean}'\n\n"
-    summary += "### 🔍 Resultados de Búsqueda Semántica RAG:\n"
-    
     if docs:
-        summary += "He recuperado y ordenado los siguientes fragmentos relevantes de la documentación del proyecto:\n\n"
-        for doc_id, doc_text in docs[:2]: # Show top 2 matches
-            clean_text = doc_text.strip()
-            if len(clean_text) > 400:
-                excerpt = clean_text[:400] + "..."
-            else:
-                excerpt = clean_text
-            summary += f"📄 **[`{doc_id}`]**\n> {excerpt}\n\n"
-            
-        summary += "---\n"
-        
-        # 1. Extractive Heuristic QA
-        # We split doc content into sentences and find those that contain query keywords
         prompt_normalized = normalize_text(prompt_clean)
         prompt_words = [w.strip("?,.:;!\"'()").lower() for w in prompt_normalized.split() if len(w) > 2]
-        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "hay", "mas"}
+        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "hay", "mas", "existen", "en", "iot", "modo", "modos", "operacion"}
         query_keywords = [w for w in prompt_words if w not in stopwords]
         
-        matched_sentences = []
-        for doc_id, doc_text in docs:
-            # Simple sentence tokenizer by period or question mark followed by whitespace
-            sentences = re.split(r'(?<=[.?!])\s+', doc_text)
-            for sent in sentences:
-                sent_clean = sent.strip()
-                if not sent_clean or len(sent_clean) < 10:
-                    continue
-                sent_norm = normalize_text(sent_clean)
-                sent_words = [w.strip("?,.:;!\"'()").lower() for w in sent_norm.split()]
-                overlap = sum(1 for kw in query_keywords if kw in sent_words)
-                if overlap > 0:
-                    matched_sentences.append((overlap, sent_clean, doc_id))
-                    
-        # Sort by overlap score descending, then sentence length descending
-        matched_sentences.sort(key=lambda x: (x[0], len(x[1])), reverse=True)
+        best_doc_id = None
+        best_doc_text = None
+        max_overlap = -1
         
-        # 2. Compile response
-        summary += "### 💡 Respuesta y Recomendación del Agente:\n"
-        if matched_sentences:
-            summary += (
-                "De acuerdo a los extractos de los documentos indexados, "
-                "aquí están los pasajes exactos que responden a tu consulta:\n\n"
+        for doc_id, doc_text in docs:
+            doc_norm = normalize_text(doc_text)
+            overlap = sum(1 for kw in query_keywords if kw in doc_norm)
+            if overlap > max_overlap:
+                max_overlap = overlap
+                best_doc_id = doc_id
+                best_doc_text = doc_text
+                
+        # If we have a matching document (especially for user uploaded PDFs or files)
+        if best_doc_text and (max_overlap > 0 or "file_" in best_doc_id):
+            cleaned_text = clean_slide_text(best_doc_text)
+            
+            # Format lines (convert lines starting with terms into lists/bold keys)
+            formatted_lines = []
+            lines = cleaned_text.split("\n")
+            for line in lines:
+                match = re.match(r'^([A-ZÁÉÍÓÚÑ][A-Za-z\s_-áéíóúñ]+):(.*)', line)
+                if match:
+                    key = match.group(1).strip()
+                    val = match.group(2).strip()
+                    formatted_lines.append(f"* **{key}:** {val}")
+                else:
+                    # Keep indentation if it looks like bullet values
+                    formatted_lines.append(line)
+            
+            synthesized_answer = "\n".join(formatted_lines)
+            source_display = best_doc_id
+            if "_" in source_display:
+                parts = source_display.split("_")
+                source_display = parts[1] if len(parts) > 1 else source_display
+            
+            response = (
+                f"### 📝 Respuesta del Agente:\n"
+                f"Basado en el documento **{source_display}** cargado en la base de datos:\n\n"
+                f"{synthesized_answer}\n"
             )
-            # Take top 3 matching sentences
-            seen_sents = set()
-            count = 0
-            for score, sent, doc_id in matched_sentences:
-                sent_norm = sent.lower().strip()
-                if sent_norm in seen_sents:
-                    continue
-                seen_sents.add(sent_norm)
-                summary += f"👉 *\"{sent}\"* (encontrado en `{doc_id}`)\n"
-                count += 1
-                if count >= 3:
-                    break
-                    
-            summary += "\n---\n*Nota: Estos fragmentos fueron extraídos semánticamente en tiempo real de tu base de conocimiento local utilizando el segmentador y recuperador de la infraestructura.*"
+            return response
         else:
-            # Fallback to custom keywords check if no direct sentence matches
+            # Fallback to custom keywords check for system infrastructure documentation
             lower_prompt = prompt_clean.lower()
             if any(w in lower_prompt for w in ["documento", "meter", "entrenar", "pdf", "procesar", "ingestar"]):
-                summary += (
+                return (
+                    "### 💡 Recomendación del Agente:\n"
                     "Para alimentar nuevos documentos e indexarlos en la infraestructura de IA, debes seguir este flujo de trabajo:\n"
                     "1. **Extracción y Parseo:** Usa el módulo `multimodal-doc-parser` para convertir PDFs o imágenes a Markdown estructurado utilizando modelos VLM.\n"
                     "2. **Segmentación:** Fragmenta el texto con el módulo `semantic-chunking-engine` para obtener chunks basados en similitud semántica.\n"
@@ -1141,32 +1151,36 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
                     "4. **Almacenamiento e Indexación:** Inserta los vectores en la base de datos `nano-vector-db` configurada con índice HNSW para habilitar búsquedas ultra-rápidas."
                 )
             elif any(w in lower_prompt for w in ["vector", "hnsw", "db", "almacenar", "base de datos"]):
-                summary += (
+                return (
+                    "### 💡 Recomendación del Agente:\n"
                     "Para interactuar con la base de datos vectorial del proyecto:\n"
                     "1. Crea una base de datos con `db = NanoVectorDB(dimension=64, index_type='hnsw')`.\n"
                     "2. Agrega vectores llamando a `db.insert(id=doc_id, vector=vector_float, metadata=meta_dict)`.\n"
                     "3. Realiza búsquedas aproximadas de vecinos más cercanos (ANN) usando `db.query(vector=query_vector, top_k=3)`."
                 )
             elif any(w in lower_prompt for w in ["chunk", "semantic", "segmentar", "fragmentar"]):
-                summary += (
+                return (
+                    "### 💡 Recomendación del Agente:\n"
                     "El módulo `semantic-chunking-engine` segmenta textos analizando la distancia coseno entre oraciones adyacentes.\n"
                     "Configura una instancia con un umbral dinámico (media + threshold * desviación estándar) para agrupar oraciones en párrafos sin romper la coherencia semántica."
                 )
             elif any(w in lower_prompt for w in ["guardrail", "seguridad", "proteg", "filtra"]):
-                summary += (
+                return (
+                    "### 💡 Recomendación del Agente:\n"
                     "Para proteger tu aplicación:\n"
                     "1. Instancia el escudo con `shield = LLMGuardrailsShield()`.\n"
                     "2. Llama a `shield.validate_input(prompt)` para filtrar inyecciones, jailbreaks y anonimizar teléfonos/emails.\n"
                     "3. Valida las salidas generadas mediante `shield.validate_output(response, context)` para evitar alucinaciones."
                 )
             else:
-                summary += (
+                return (
+                    "### 💡 Recomendación del Agente:\n"
                     "He recuperado la información relevante sobre este tema del repositorio. "
-                    "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados arriba."
+                    "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados."
                 )
     else:
-        summary += (
-            "No se han encontrado fragmentos específicos en PROJECTS.md relacionados directamente con tu consulta.\n\n"
+        return (
+            "No se han encontrado fragmentos específicos relacionados directamente con tu consulta.\n\n"
             "Por favor, intenta preguntar acerca de conceptos específicos del proyecto como 'NanoVectorDB', 'Semantic Chunker', 'Guardrails', 'ReAct Agents' o 'Embeddings'."
         )
         
@@ -1183,44 +1197,32 @@ async def api_documents_upload_file(file: UploadFile = File(...)):
     _, ext = os.path.splitext(filename.lower())
     
     content_text = ""
+    chunks_list = []
     try:
         if ext == ".pdf":
             import fitz
             pdf_bytes = await file.read()
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            pages_text = []
-            for page in doc:
-                pages_text.append(page.get_text())
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text().strip()
+                if text:
+                    chunks_list.append(text)
             doc.close()
-            content_text = "\n\n".join(pages_text)
+            content_text = f"PDF con {len(chunks_list)} páginas."
         elif ext in [".txt", ".md", ".json", ".py", ".js", ".csv", ".yaml", ".yml", ".ini"]:
             file_bytes = await file.read()
             content_text = file_bytes.decode("utf-8", errors="ignore")
+            chunks_list = [p.strip() for p in content_text.split("\n\n") if p.strip()]
         else:
             return {"error": f"Formato de archivo '{ext}' no soportado. Sube un PDF, TXT, MD, etc."}
     except Exception as e:
         return {"error": f"Error al leer el archivo: {str(e)}"}
         
-    if not content_text.strip():
+    if not chunks_list:
         return {"error": "El archivo está vacío o no contiene texto extraíble."}
         
     provider = MockEmbeddingProvider(dimension=64)
-    chunker = SemanticChunker(embedding_provider=provider) if SemanticChunker else None
-    
-    chunks_list = []
-    if chunker:
-        try:
-            chunks = chunker.chunk_text(content_text)
-            chunks_list = [c["text"] for c in chunks]
-        except Exception as e:
-            logger.error(f"Error chunking document file: {e}")
-            chunks_list = [content_text]
-    else:
-        chunks_list = [s.strip() for s in content_text.split("\n\n") if s.strip()]
-        
-    if not chunks_list:
-        chunks_list = [content_text]
-        
     title_clean = filename.replace(" ", "_").lower()
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"file_{title_clean}_chunk_{i}"
@@ -1247,33 +1249,17 @@ def api_documents_upload(req: DocumentUploadRequest):
     title_clean = req.title.strip().replace(" ", "_").lower()
     content_text = req.content.strip()
     
-    # 1. Run Chunker
+    # 1. Split by double newlines
     provider = MockEmbeddingProvider(dimension=64)
-    chunker = SemanticChunker(embedding_provider=provider) if SemanticChunker else None
-    
-    chunks_list = []
-    if chunker:
-        try:
-            chunks = chunker.chunk_text(content_text)
-            chunks_list = [c["text"] for c in chunks]
-        except Exception as e:
-            logger.error(f"Error chunking uploaded document: {e}")
-            chunks_list = [content_text]
-    else:
-        chunks_list = [s.strip() for s in content_text.split("\n\n") if s.strip()]
-        
+    chunks_list = [p.strip() for p in content_text.split("\n\n") if p.strip()]
     if not chunks_list:
         chunks_list = [content_text]
         
     # 2. Insert into database (HNSW) and global_corpus (BM25)
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"uploaded_{title_clean}_chunk_{i}"
-        
-        # Calculate embedding vector
         vec = provider.get_embeddings([chunk_text])[0]
         vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-        
-        # Insert
         global_db.insert(id=doc_id, vector=vec_64, metadata={"source": req.title})
         global_corpus[doc_id] = chunk_text
         

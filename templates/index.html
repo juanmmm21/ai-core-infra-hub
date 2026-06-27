@@ -1007,8 +1007,13 @@ print("Listado de archivos:", os.listdir("."))</textarea>
             // Replace #### headings
             html = html.replace(/#### (.*?)\n/g, '<h4 style="color: var(--text-light); font-size: 14px; margin: 12px 0 6px 0; font-weight: 600;">$1</h4>');
             
+            // Replace bold text **text**
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--accent-cyan);">$1</strong>');
+            
+            // Replace list bullets * 
+            html = html.replace(/^\*\s*(.*?)(?=\n|$)/gm, '<li style="margin-left: 16px; margin-bottom: 6px; list-style-type: square; color: var(--text-primary); font-size: 13.5px;">$1</li>');
+            
             // Replace document boxes
-            // 📄 **[`doc_id`]**\n> doc_text
             html = html.replace(/📄 \*\*\[`(.*?)`\]\*\*\n>\s*(.*?)(?=\n\n|$)/g, `
                 <div style="background-color: #0b0c10; border-left: 3px solid var(--accent-purple); padding: 12px; margin-bottom: 12px; border-radius: 4px;">
                     <div style="font-weight: 600; font-size: 12px; color: var(--accent-purple); margin-bottom: 4px;">📄 Fragmento: $1</div>
