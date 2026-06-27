@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import asyncio
 
-# Setup path mapping to sibling projects (Interlinking)
+# Setup path mapping to nested and sibling projects (Interlinking)
 HUB_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(HUB_DIR)
 
@@ -42,103 +42,321 @@ PROJECT_PATHS = [
 ]
 
 for p in PROJECT_PATHS:
-    p_path = os.path.join(PARENT_DIR, p)
-    if p_path not in sys.path:
-        sys.path.append(p_path)
+    nested_path = os.path.join(HUB_DIR, p)
+    if os.path.isdir(nested_path):
+        if nested_path not in sys.path:
+            sys.path.insert(0, nested_path)
+    else:
+        sibling_path = os.path.join(PARENT_DIR, p)
+        if sibling_path not in sys.path:
+            sys.path.append(sibling_path)
 
-# Safe imports with placeholders if necessary
+
+# Safe imports with placeholders and simulated fallbacks if necessary
+import hashlib
+import random
+import re
+
 try:
     from tokenizer import BPETokenizer
 except ImportError:
-    BPETokenizer = None
+    class BPETokenizer:
+        def __init__(self):
+            pass
+        def train(self, text: str, vocab_size: int, verbose: bool = False) -> None:
+            pass
+        def encode(self, text: str) -> List[int]:
+            return [ord(c) for c in text]
+        def decode(self, tokens: List[int]) -> str:
+            return "".join(chr(t) for t in tokens)
 
 try:
     from chunker import SemanticChunker
     from embedding_provider import MockEmbeddingProvider
 except ImportError:
-    SemanticChunker, MockEmbeddingProvider = None, None
+    class MockEmbeddingProvider:
+        def __init__(self, dimension: int = 384) -> None:
+            self.dimension = dimension
+        def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+            embeddings = []
+            for text in texts:
+                # Generate deterministic pseudo-embeddings based on text hash
+                rng = random.Random(int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16))
+                embeddings.append([rng.normalvariate(0.0, 1.0) for _ in range(self.dimension)])
+            return embeddings
+
+    class SemanticChunker:
+        def __init__(self, embedding_provider, tokenizer=None, window_size=3, threshold_factor=1.2, max_tokens=512):
+            self.embedding_provider = embedding_provider
+        def chunk_text(self, text: str) -> List[Dict[str, Any]]:
+            # Fallback basic chunking by sentences
+            sentences = [s.strip() for s in re.split(r'(?<=\.|\?|!)\s+', text) if s.strip()]
+            return [{"text": s, "sentences": [s], "index": i} for i, s in enumerate(sentences)]
 
 try:
     from parser import MultimodalDocParser
     from backend import LocalExtractBackend
 except ImportError:
-    MultimodalDocParser, LocalExtractBackend = None, None
+    class LocalExtractBackend:
+        pass
+    class MultimodalDocParser:
+        pass
 
 try:
     from database import NanoVectorDB
 except ImportError:
-    NanoVectorDB = None
+    class NanoVectorDB:
+        def __init__(self, dimension: int = 64, index_type: str = "hnsw"):
+            self.dimension = dimension
+            self.index_type = index_type
+            self.data = {}
+        def insert(self, id: str, vector: List[float], metadata: Optional[Dict[str, Any]] = None):
+            self.data[id] = {"vector": vector, "metadata": metadata or {}}
+        def query(self, vector: List[float], top_k: int = 3, filter: Optional[Dict[str, Any]] = None):
+            results = []
+            v1 = np.array(vector)
+            for item_id, item in self.data.items():
+                v2 = np.array(item["vector"])
+                # Cosine distance
+                dot = np.dot(v1, v2)
+                norm1 = np.linalg.norm(v1)
+                norm2 = np.linalg.norm(v2)
+                sim = dot / (norm1 * norm2 + 1e-9)
+                dist = 1.0 - float(sim)
+                results.append({"id": item_id, "distance": dist, "metadata": item["metadata"]})
+            results.sort(key=lambda x: x["distance"])
+            return results[:top_k]
 
 try:
     from extractor import KnowledgeGraphStore
 except ImportError:
-    KnowledgeGraphStore = None
+    class KnowledgeGraphStore:
+        pass
 
 try:
     from pipeline import HybridSearchPipeline
     from bm25 import BM25Retriever
 except ImportError:
-    HybridSearchPipeline, BM25Retriever = None, None
+    class BM25Retriever:
+        def __init__(self):
+            self.corpus = {}
+        def fit(self, corpus: Dict[str, str]):
+            self.corpus = corpus
+        def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[float, str]]:
+            q_words = set(query.lower().split())
+            results = []
+            for doc_id, text in self.corpus.items():
+                d_words = text.lower().split()
+                score = sum(1.0 for w in q_words if w in d_words)
+                results.append((score, doc_id))
+            results.sort(reverse=True, key=lambda x: x[0])
+            return results[:top_k]
+    class HybridSearchPipeline:
+        pass
 
 try:
     from reranker import CrossEncoderReranker
 except ImportError:
-    CrossEncoderReranker = None
+    class CrossEncoderReranker:
+        def __init__(self, model_name: str, device: str = "cpu"):
+            self.is_online = False
+        def rerank(self, query: str, documents: List[Dict[str, Any]], top_k: int = 3) -> List[Dict[str, Any]]:
+            q_words = set(query.lower().split())
+            scored = []
+            for doc in documents:
+                d_words = doc["text"].lower().split()
+                score = sum(0.3 for w in q_words if w in d_words) + 0.1
+                doc_copy = doc.copy()
+                doc_copy["rerank_score"] = min(0.99, score)
+                scored.append(doc_copy)
+            scored.sort(key=lambda x: x["rerank_score"], reverse=True)
+            return scored[:top_k]
 
 try:
     from inference_engine import InferenceEngine
 except ImportError:
-    InferenceEngine = None
+    class InferenceEngine:
+        pass
 
 try:
     from router import SemanticModelRouter, ModelProfile
 except ImportError:
-    SemanticModelRouter, ModelProfile = None, None
+    class SemanticModelRouter:
+        def route(self, prompt: str):
+            length = len(prompt.split())
+            if length < 6:
+                class Decision:
+                    selected_model = "gpt-4o-mini"
+                    reason = "Consulta simple y corta (Simulado)"
+                    estimated_cost_per_1k_tokens = 0.00015
+                    complexity_category = "Baja"
+                    routing_path = "Local rule-based heuristic -> gpt-4o-mini"
+                return Decision()
+            else:
+                class Decision:
+                    selected_model = "claude-3-5-sonnet"
+                    reason = "Consulta compleja o requiere codigo (Simulado)"
+                    estimated_cost_per_1k_tokens = 0.0030
+                    complexity_category = "Alta"
+                    routing_path = "Local rule-based heuristic -> claude-3-5-sonnet"
+                return Decision()
 
 try:
     from shield import LLMGuardrailsShield
 except ImportError:
-    LLMGuardrailsShield = None
+    class LLMGuardrailsShield:
+        def validate_input(self, prompt: str) -> Tuple[bool, str, str]:
+            # Redact basic phone numbers
+            clean = prompt
+            phone_pattern = r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b'
+            if re.search(phone_pattern, prompt):
+                clean = re.sub(phone_pattern, "[REDACTED_PHONE]", prompt)
+            
+            # Simulated prompt injection check
+            injection_patterns = ["ignore prior instructions", "delete database", "drop table"]
+            for pat in injection_patterns:
+                if pat in prompt.lower():
+                    return False, clean, f"Blocked: injection pattern '{pat}' detected (Simulado)"
+            return True, clean, "Aprobado (Simulado)"
+            
+        def validate_output(self, response: str, context: Optional[str] = None) -> Tuple[bool, str, str]:
+            if "sk-proj-" in response:
+                return False, response.replace("sk-proj-", "sk-proj-[REDACTED]"), "Blocked: API key leak detected (Simulado)"
+            return True, response, "Aprobado (Simulado)"
 
 try:
     from agent import AutonomousAgent
     from orchestrator import AgentOrchestrator
 except ImportError:
-    AutonomousAgent, AgentOrchestrator = None, None
+    class AutonomousAgent:
+        def __init__(self, name: str, role: str, instruction: str, use_mock_llm: bool = True):
+            self.name = name
+            self.scratchpad = []
+        def add_tool(self, name: str, func: Any):
+            pass
+    class AgentOrchestrator:
+        def __init__(self, name: str):
+            self.agents = {}
+        def register_agent(self, agent: Any):
+            self.agents[agent.name] = agent
+        def execute(self, task: str) -> str:
+            for name, agent in self.agents.items():
+                agent.scratchpad.append((
+                    f"Analizando como procesar '{task}' con rol de {agent.name}",
+                    "search_db",
+                    f"Resultados de busqueda mock del agente {name}"
+                ))
+            return f"Respuesta de orquestacion multi-agente simulada para: {task}."
 
 try:
     from memory import AgenticMemory
 except ImportError:
-    AgenticMemory = None
+    class AgenticMemory:
+        def __init__(self, decay_factor: float = 0.05, vector_dim: int = 16):
+            self.decay_factor = decay_factor
+            self.facts = []
+        def save_fact(self, fact: str, importance: int = 5):
+            self.facts.append({"fact": fact, "importance": importance, "created_at": time.time()})
+        def recall(self, query: str, top_k: int = 1, current_time: Optional[float] = None) -> List[Dict[str, Any]]:
+            if not current_time:
+                current_time = time.time()
+            results = []
+            for item in self.facts:
+                delta_t = current_time - item["created_at"]
+                retention = math.exp(-self.decay_factor * delta_t)
+                score = retention * (item["importance"] / 10.0)
+                results.append({"fact": item["fact"], "score": score, "decayed_importance": item["importance"] * retention})
+            results.sort(key=lambda x: x["score"], reverse=True)
+            return results[:top_k]
 
 try:
     from runtime import SecureToolRuntime
 except ImportError:
-    SecureToolRuntime = None
+    class SecureToolRuntime:
+        def run_code(self, code: str, timeout_seconds: float = 1.5) -> Tuple[bool, str, str, Optional[str]]:
+            forbidden = ["os.", "sys.", "subprocess", "open("]
+            for word in forbidden:
+                if word in code:
+                    return False, "", "", f"SecurityValidationError: Bloqueado por usar llamadas prohibidas '{word}' (Simulado)"
+            return True, "Ejecucion en Sandbox exitosa (Simulado)\nOutput: 42", "", None
 
 try:
     from generator import SyntheticDataGenerator
 except ImportError:
-    SyntheticDataGenerator = None
+    class SyntheticDataGenerator:
+        def __init__(self, min_length: int = 10, dedup_threshold: float = 0.5):
+            pass
+        def generate_instruction_dataset(self, topics: List[str], count_per_topic: int = 2) -> List[Any]:
+            class Item:
+                def __init__(self, inst, out):
+                    self.instruction = inst
+                    self.output = out
+            results = []
+            for t in topics:
+                for i in range(count_per_topic):
+                    results.append(Item(f"Como funciona {t}?", f"Explicacion simulada {i} sobre {t}."))
+            return results
+        def generate_dpo_dataset(self, topics: List[str], count_per_topic: int = 2) -> List[Any]:
+            class DpoItem:
+                def __init__(self, p, c, r):
+                    self.prompt = p
+                    self.chosen = c
+                    self.rejected = r
+            results = []
+            for t in topics:
+                for i in range(count_per_topic):
+                    results.append(DpoItem(f"Explicar {t}", f"Respuesta elegida y optimizada sobre {t}.", f"Respuesta rechazada o alucinada sobre {t}."))
+            return results
 
 try:
     from dvc import DatasetVCS
 except ImportError:
-    DatasetVCS = None
+    class DatasetVCS:
+        def __init__(self, store_dir: str = ".dvc_hub_store"):
+            self.commits = []
+        def init(self):
+            pass
+        def commit(self, filename: str, message: str) -> str:
+            commit_hash = hashlib.md5(f"{filename}-{message}-{time.time()}".encode()).hexdigest()[:8]
+            self.commits.append({"hash": commit_hash, "message": message, "timestamp": time.time()})
+            return commit_hash
+        def diff(self, commit_a: str, commit_b: str) -> Dict[str, List[Any]]:
+            return {"added": [], "removed": [], "modified": []}
+        def log(self) -> List[Dict[str, Any]]:
+            return self.commits
 
 try:
     from finetuner import NF4Quantizer, LoraConfig
 except ImportError:
-    NF4Quantizer, LoraConfig = None, None
+    class NF4Quantizer:
+        pass
+    class LoraConfig:
+        pass
 
 try:
     from evaluator import LLMEvaluator
 except ImportError:
-    LLMEvaluator = None
+    class LLMEvaluator:
+        @staticmethod
+        def clean_and_tokenize(text: str) -> List[str]:
+            return text.lower().split()
+        @staticmethod
+        def compute_jaccard(tokens1: List[str], tokens2: List[str]) -> float:
+            s1, s2 = set(tokens1), set(tokens2)
+            return len(s1 & s2) / len(s1 | s2) if s1 | s2 else 0.0
+        @staticmethod
+        def compute_cosine_similarity(tokens1: List[str], tokens2: List[str]) -> float:
+            s1, s2 = set(tokens1), set(tokens2)
+            return len(s1 & s2) / (math.sqrt(len(s1)) * math.sqrt(len(s2)) + 1e-9)
+        @staticmethod
+        def compute_bleu(tokens1: List[str], tokens2: List[str]) -> float:
+            s1, s2 = set(tokens1), set(tokens2)
+            return len(s1 & s2) / len(s2) if s2 else 0.0
 
 try:
     from tracer import GlobalTracer
 except ImportError:
+
     # Fallback tracer
     class GlobalTracer:
         def __init__(self):
