@@ -45,7 +45,7 @@ for p in PROJECT_PATHS:
     nested_path = os.path.join(HUB_DIR, p)
     if os.path.isdir(nested_path):
         if nested_path not in sys.path:
-            sys.path.insert(0, nested_path)
+            sys.path.append(nested_path)
     else:
         sibling_path = os.path.join(PARENT_DIR, p)
         if sibling_path not in sys.path:
