@@ -204,6 +204,18 @@ except ImportError:
             for doc_id, text in self.corpus.items():
                 d_stems = self._get_stems(text)
                 score = sum(1.0 for s in q_stems if s in d_stems)
+                
+                # Penalizar paginas de bibliografia, indices o anexos (sin importar acentos)
+                doc_lower = text.lower()
+                accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
+                doc_norm = doc_lower
+                for a, b in accents.items():
+                    doc_norm = doc_norm.replace(a, b)
+                    
+                penalty_keywords = ["bibliografia", "webgrafia", "indice de", "anexo", "referencias"]
+                if any(kw in doc_norm[:120] for kw in penalty_keywords):
+                    score *= 0.1
+                    
                 results.append((score, doc_id))
             results.sort(reverse=True, key=lambda x: x[0])
             return results[:top_k]
@@ -236,6 +248,18 @@ except ImportError:
             for doc in documents:
                 d_stems = self._get_stems(doc["text"])
                 score = sum(0.3 for s in q_stems if s in d_stems) + 0.1
+                
+                # Penalizar paginas de bibliografia, indices o anexos (sin importar acentos)
+                doc_lower = doc["text"].lower()
+                accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
+                doc_norm = doc_lower
+                for a, b in accents.items():
+                    doc_norm = doc_norm.replace(a, b)
+                    
+                penalty_keywords = ["bibliografia", "webgrafia", "indice de", "anexo", "referencias"]
+                if any(kw in doc_norm[:120] for kw in penalty_keywords):
+                    score -= 3.0
+                    
                 doc_copy = doc.copy()
                 doc_copy["rerank_score"] = min(0.99, score)
                 scored.append(doc_copy)
