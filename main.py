@@ -1138,10 +1138,12 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         if best_doc_text:
             cleaned_text = clean_slide_text(best_doc_text)
             
+            # Correct source name parsing
             source_display = best_doc_id
-            if "_" in source_display:
-                parts = source_display.split("_")
-                source_display = parts[1] if len(parts) > 1 else source_display
+            for sep in ["_chunk_", "_sentence_", "_page_"]:
+                if sep in source_display:
+                    source_display = source_display.split(sep)[0]
+                    break
                 
             # Smart Explanatory Synthesizer
             lines = [l.strip() for l in cleaned_text.split("\n") if l.strip()]
@@ -1156,7 +1158,7 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
                     
             body = ""
             if list_items:
-                body += "Se describen los siguientes componentes y especificaciones técnicas estructuradas:\n\n"
+                body += "Se identifican los siguientes conceptos y especificaciones clave:\n\n"
                 for key, val in list_items:
                     key_cap = key.capitalize()
                     val_clean = val.strip()
@@ -1164,34 +1166,35 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
                         val_clean = val_clean[1:].strip()
                     
                     if "activo" in key.lower() and not "inactivo" in key.lower():
-                        body += f"*   **Estado {key_cap}**: Representa la modalidad operativa donde {val_clean[0].lower()}{val_clean[1:]} Esto garantiza que el dispositivo ejecute sus tareas de procesamiento y transmisión en tiempo real.\n"
+                        body += f"*   **{key_cap}**: Estado de operatividad completa donde {val_clean[0].lower()}{val_clean[1:]}\n"
                     elif "inactivo" in key.lower():
-                        body += f"*   **Estado {key_cap}**: Es un perfil de ahorro de energía en el cual {val_clean[0].lower()}{val_clean[1:]} El hardware suspende la mayoría de sus módulos para preservar batería, despertando solo ante eventos de interrupción.\n"
+                        body += f"*   **{key_cap}**: Perfil de ahorro de energía caracterizado por ser un {val_clean[0].lower()}{val_clean[1:]}\n"
                     elif "consumo" in key.lower() or "ejemplo" in key.lower():
                         if val_clean:
-                            body += f"*   **Métricas de {key_cap}**: Se detallan medidas de referencia práctica para cuantificar la demanda del sistema: {val_clean}.\n"
+                            body += f"*   **{key_cap}**: Demanda del sistema ({val_clean}).\n"
                         else:
-                            body += f"*   **Métricas de {key_cap}**:\n"
+                            body += f"*   **{key_cap}**:\n"
                     else:
-                        body += f"*   **{key_cap}**: Se refiere a {val_clean[0].lower()}{val_clean[1:]} Este parámetro es fundamental para la correcta configuración e integración del sistema.\n"
+                        body += f"*   **{key_cap}**: {val_clean}\n"
             
             if paragraphs:
-                body += "\n**Contexto y Análisis de Operación:**\n"
+                if list_items:
+                    body += "\n**Contexto y Detalles Adicionales:**\n"
                 for p in paragraphs:
                     if p.startswith(("-", "•", "*")):
                         body += f"*   {p[1:].strip()}\n"
-                    elif ":" in p:
+                    elif ":" in p and len(p.split(":", 1)[0]) < 20:
                         k, v = p.split(":", 1)
                         body += f"    *   **{k.strip().capitalize()}**: {v.strip()}\n"
                     elif len(p) < 40 and not p.endswith("."):
                         body += f"#### {p}\n"
                     else:
-                        body += f"El documento indica que {p[0].lower()}{p[1:]} Esto tiene implicaciones directas en el diseño de la arquitectura y la eficiencia del ciclo de trabajo.\n\n"
+                        body += f"{p}\n\n"
             
             response = (
-                f"### 📝 Respuesta del Agente (Explicación Sintetizada):\n"
+                f"### 📝 Respuesta del Agente:\n"
                 f"Basado en el documento **{source_display}** cargado en la base de datos:\n\n"
-                f"{body}\n"
+                f"{body.strip()}\n"
             )
             return response
         else:
@@ -1282,6 +1285,8 @@ async def api_documents_upload_file(file: UploadFile = File(...)):
     title_clean = filename.replace(" ", "_").lower()
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"file_{title_clean}_chunk_{i}"
+        if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
+            continue
         vec = provider.get_embeddings([chunk_text])[0]
         vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
         global_db.insert(id=doc_id, vector=vec_64, metadata={"source": filename})
@@ -1315,6 +1320,8 @@ def api_documents_upload(req: DocumentUploadRequest):
     # 2. Insert into database (HNSW) and global_corpus (BM25)
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"uploaded_{title_clean}_chunk_{i}"
+        if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
+            continue
         vec = provider.get_embeddings([chunk_text])[0]
         vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
         global_db.insert(id=doc_id, vector=vec_64, metadata={"source": req.title})
