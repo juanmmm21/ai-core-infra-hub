@@ -1229,11 +1229,22 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
                     break
                 
             # Smart Explanatory Synthesizer
-            lines = [l.strip() for l in cleaned_text.split("\n") if l.strip()]
+            raw_lines = [l.strip() for l in cleaned_text.split("\n") if l.strip()]
+            
+            # Reconstruir lineas cortadas por saltos de linea en las diapositivas
+            lines = []
+            for line in raw_lines:
+                if lines and not (lines[-1].endswith(".") or lines[-1].endswith(":") or lines[-1].endswith(";")):
+                    is_new_item = re.match(r'^([A-Za-z\s_-áéíóúñÁÉÍÓÚÑ\s]+):', line) or line.startswith(("-", "•", "*"))
+                    if not is_new_item:
+                        lines[-1] += " " + line
+                        continue
+                lines.append(line)
+                
             list_items = []
             paragraphs = []
             for line in lines:
-                match = re.match(r'^([A-Za-z\s_-áéíóúñÁÉÍÓÚÑ]+):(.*)', line)
+                match = re.match(r'^([A-Za-z\s_-áéíóúñÁÉÍÓÚÑ\s]+):(.*)', line)
                 if match:
                     list_items.append((match.group(1).strip(), match.group(2).strip()))
                 else:
