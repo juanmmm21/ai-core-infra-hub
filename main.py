@@ -76,12 +76,53 @@ try:
     from embedding_provider import MockEmbeddingProvider
 except ImportError:
     class MockEmbeddingProvider:
-        def __init__(self, dimension: int = 384) -> None:
+        def __init__(self, dimension: int = 768) -> None:
             self.dimension = dimension
+            
         def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+            trainer_dir = "/Users/golfeno/Desarrollo/ai-core-infra/contrastive-embedding-trainer"
+            trainer_python = os.path.join(trainer_dir, ".venv", "bin", "python3")
+            checkpoint_path = os.path.join(trainer_dir, "model_output", "siamese_state.pt")
+            
+            if os.path.exists(checkpoint_path) and os.path.exists(trainer_python):
+                try:
+                    import subprocess
+                    import json
+                    cmd = [
+                        trainer_python,
+                        "-c",
+                        f"""
+import sys, torch, json
+sys.path.append("{trainer_dir}")
+from model import SiameseTransformer
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("{trainer_dir}/model_output")
+model = SiameseTransformer("distilbert-base-uncased")
+model.load_state_dict(torch.load("{trainer_dir}/model_output/siamese_state.pt", map_location="cpu"))
+model.eval()
+
+texts = json.loads(sys.argv[1])
+embeddings = []
+with torch.no_grad():
+    for text in texts:
+        encoded = tokenizer(text, max_length=64, padding="max_length", truncation=True, return_tensors="pt")
+        embedding = model(encoded["input_ids"], encoded["attention_mask"]).squeeze(0).tolist()
+        embeddings.append(embedding)
+print(json.dumps(embeddings))
+                        """,
+                        json.dumps(texts)
+                    ]
+                    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                    embs = json.loads(res.stdout.strip())
+                    if len(embs) == len(texts) and len(embs[0]) == self.dimension:
+                        return embs
+                except Exception as e:
+                    logging.getLogger("ai_core_infra_hub").warning(f"Fallback to deterministic hash embeddings due to: {e}")
+
+            # Fallback to deterministic pseudo-embeddings
             embeddings = []
             for text in texts:
-                # Generate deterministic pseudo-embeddings based on text hash
                 rng = random.Random(int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16))
                 embeddings.append([rng.normalvariate(0.0, 1.0) for _ in range(self.dimension)])
             return embeddings
@@ -107,7 +148,7 @@ try:
     from database import NanoVectorDB
 except ImportError:
     class NanoVectorDB:
-        def __init__(self, dimension: int = 64, index_type: str = "hnsw"):
+        def __init__(self, dimension: int = 768, index_type: str = "hnsw"):
             self.dimension = dimension
             self.index_type = index_type
             self.data = {}
@@ -141,14 +182,28 @@ except ImportError:
     class BM25Retriever:
         def __init__(self):
             self.corpus = {}
+        def _normalize(self, t: str) -> str:
+            accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
+            res = t.lower().strip("?,.:;!\"'()[]{}")
+            for a, b in accents.items():
+                res = res.replace(a, b)
+            return res
         def fit(self, corpus: Dict[str, str]):
             self.corpus = corpus
+        def _get_stems(self, text: str) -> Set[str]:
+            words = [self._normalize(w) for w in text.split() if w.strip()]
+            stems = set()
+            for w in words:
+                stems.add(w)
+                if len(w) > 4:
+                    stems.add(w[:4])
+            return stems
         def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[float, str]]:
-            q_words = set(query.lower().split())
+            q_stems = self._get_stems(query)
             results = []
             for doc_id, text in self.corpus.items():
-                d_words = text.lower().split()
-                score = sum(1.0 for w in q_words if w in d_words)
+                d_stems = self._get_stems(text)
+                score = sum(1.0 for s in q_stems if s in d_stems)
                 results.append((score, doc_id))
             results.sort(reverse=True, key=lambda x: x[0])
             return results[:top_k]
@@ -161,12 +216,26 @@ except ImportError:
     class CrossEncoderReranker:
         def __init__(self, model_name: str, device: str = "cpu"):
             self.is_online = False
+        def _normalize(self, t: str) -> str:
+            accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
+            res = t.lower().strip("?,.:;!\"'()[]{}")
+            for a, b in accents.items():
+                res = res.replace(a, b)
+            return res
+        def _get_stems(self, text: str) -> Set[str]:
+            words = [self._normalize(w) for w in text.split() if w.strip()]
+            stems = set()
+            for w in words:
+                stems.add(w)
+                if len(w) > 4:
+                    stems.add(w[:4])
+            return stems
         def rerank(self, query: str, documents: List[Dict[str, Any]], top_k: int = 3) -> List[Dict[str, Any]]:
-            q_words = set(query.lower().split())
+            q_stems = self._get_stems(query)
             scored = []
             for doc in documents:
-                d_words = doc["text"].lower().split()
-                score = sum(0.3 for w in q_words if w in d_words) + 0.1
+                d_stems = self._get_stems(doc["text"])
+                score = sum(0.3 for s in q_stems if s in d_stems) + 0.1
                 doc_copy = doc.copy()
                 doc_copy["rerank_score"] = min(0.99, score)
                 scored.append(doc_copy)
@@ -459,7 +528,7 @@ def save_global_pipeline_state():
 def init_global_pipeline():
     global global_db, global_bm25, global_memory, global_shield, global_router, global_runtime, global_corpus, global_reranker
     
-    provider = MockEmbeddingProvider(dimension=64)
+    provider = MockEmbeddingProvider(dimension=768)
     loaded_from_disk = False
     
     # 1. Try to load from disk
@@ -481,7 +550,7 @@ def init_global_pipeline():
             
     # 2. If load failed or file doesn't exist, initialize from scratch
     if not loaded_from_disk or global_db is None or global_corpus is None:
-        global_db = NanoVectorDB(dimension=64, index_type="hnsw")
+        global_db = NanoVectorDB(dimension=768, index_type="hnsw")
         corpus = {}
         docs_to_index = []
         
@@ -517,11 +586,13 @@ def init_global_pipeline():
             except Exception as e:
                 logger.error(f"Error indexing PROJECTS.md: {e}")
                 
-        # Insert documents into Vector DB
-        for doc_id, text_content, meta in docs_to_index:
-            vec = provider.get_embeddings([text_content])[0]
-            vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-            global_db.insert(id=doc_id, vector=vec_64, metadata=meta)
+        # Insert documents into Vector DB (Batched generation for performance)
+        if docs_to_index:
+            texts_to_embed = [item[1] for item in docs_to_index]
+            all_vecs = provider.get_embeddings(texts_to_embed)
+            for (doc_id, text_content, meta), vec in zip(docs_to_index, all_vecs):
+                vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
+                global_db.insert(id=doc_id, vector=vec_768, metadata=meta)
             
         global_corpus = corpus
         # Save to disk
@@ -702,19 +773,18 @@ def api_contrastive_similarity(req: SimilarityRequest):
 def api_vector_db_insert(req: VectorInsertRequest):
     if not NanoVectorDB or not MockEmbeddingProvider:
         return {"error": "NanoVectorDB o MockEmbeddingProvider no importados."}
-    db = NanoVectorDB(dimension=64, index_type="hnsw")
+    db = NanoVectorDB(dimension=768, index_type="hnsw")
     provider = MockEmbeddingProvider()
     vec = provider.get_embeddings([req.text])[0]
-    # Ajustamos a dim 64
-    vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-    db.insert(id=req.id, vector=vec_64, metadata=req.metadata)
+    vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
+    db.insert(id=req.id, vector=vec_768, metadata=req.metadata)
     return {"status": "success", "id": req.id}
 
 @app.post("/api/vector-db/query")
 def api_vector_db_query(req: VectorQueryRequest):
     if not NanoVectorDB or not MockEmbeddingProvider:
         return {"error": "NanoVectorDB o MockEmbeddingProvider no importados."}
-    db = NanoVectorDB(dimension=64, index_type="hnsw")
+    db = NanoVectorDB(dimension=768, index_type="hnsw")
     provider = MockEmbeddingProvider()
     # Insertamos unos vectores mock de prueba
     docs = [
@@ -724,12 +794,12 @@ def api_vector_db_query(req: VectorQueryRequest):
     ]
     for doc_id, text, meta in docs:
         vec = provider.get_embeddings([text])[0]
-        vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-        db.insert(id=doc_id, vector=vec_64, metadata=meta)
+        vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
+        db.insert(id=doc_id, vector=vec_768, metadata=meta)
         
     query_vec = provider.get_embeddings([req.query])[0]
-    query_64 = query_vec[:64] if len(query_vec) >= 64 else query_vec + [0.0]*(64-len(query_vec))
-    results = db.query(vector=query_64, top_k=req.top_k, filter=req.filter)
+    query_768 = query_vec[:768] if len(query_vec) >= 768 else query_vec + [0.0]*(768-len(query_vec))
+    results = db.query(vector=query_768, top_k=req.top_k, filter=req.filter)
     # Formateamos
     formatted = []
     for r in results:
@@ -1122,9 +1192,22 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
         
         # 1. Search by keyword overlap
         if query_keywords:
+            q_stems = set()
+            for kw in query_keywords:
+                q_stems.add(kw)
+                if len(kw) > 4:
+                    q_stems.add(kw[:4])
+                    
             for doc_id, doc_text in docs:
                 doc_norm = normalize_text(doc_text)
-                overlap = sum(1 for kw in query_keywords if kw in doc_norm)
+                doc_words = [w.strip("?,.:;!\"'()[]{}").lower() for w in doc_norm.split() if w.strip()]
+                d_stems = set()
+                for w in doc_words:
+                    d_stems.add(w)
+                    if len(w) > 4:
+                        d_stems.add(w[:4])
+                
+                overlap = len(q_stems.intersection(d_stems))
                 if overlap > max_overlap:
                     max_overlap = overlap
                     best_doc_id = doc_id
@@ -1281,16 +1364,23 @@ async def api_documents_upload_file(file: UploadFile = File(...)):
     if not chunks_list:
         return {"error": "El archivo está vacío o no contiene texto extraíble."}
         
-    provider = MockEmbeddingProvider(dimension=64)
+    provider = MockEmbeddingProvider(dimension=768)
     title_clean = filename.replace(" ", "_").lower()
+    
+    chunks_to_insert = []
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"file_{title_clean}_chunk_{i}"
         if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
             continue
-        vec = provider.get_embeddings([chunk_text])[0]
-        vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-        global_db.insert(id=doc_id, vector=vec_64, metadata={"source": filename})
-        global_corpus[doc_id] = chunk_text
+        chunks_to_insert.append((doc_id, chunk_text))
+        
+    if chunks_to_insert:
+        texts_to_embed = [item[1] for item in chunks_to_insert]
+        all_vecs = provider.get_embeddings(texts_to_embed)
+        for (doc_id, chunk_text), vec in zip(chunks_to_insert, all_vecs):
+            vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
+            global_db.insert(id=doc_id, vector=vec_768, metadata={"source": filename})
+            global_corpus[doc_id] = chunk_text
         
     global_bm25.fit(global_corpus)
     save_global_pipeline_state()
@@ -1312,20 +1402,25 @@ def api_documents_upload(req: DocumentUploadRequest):
     content_text = req.content.strip()
     
     # 1. Split by double newlines
-    provider = MockEmbeddingProvider(dimension=64)
+    provider = MockEmbeddingProvider(dimension=768)
     chunks_list = [p.strip() for p in content_text.split("\n\n") if p.strip()]
     if not chunks_list:
         chunks_list = [content_text]
         
-    # 2. Insert into database (HNSW) and global_corpus (BM25)
+    chunks_to_insert = []
     for i, chunk_text in enumerate(chunks_list):
         doc_id = f"uploaded_{title_clean}_chunk_{i}"
         if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
             continue
-        vec = provider.get_embeddings([chunk_text])[0]
-        vec_64 = vec[:64] if len(vec) >= 64 else vec + [0.0]*(64-len(vec))
-        global_db.insert(id=doc_id, vector=vec_64, metadata={"source": req.title})
-        global_corpus[doc_id] = chunk_text
+        chunks_to_insert.append((doc_id, chunk_text))
+        
+    if chunks_to_insert:
+        texts_to_embed = [item[1] for item in chunks_to_insert]
+        all_vecs = provider.get_embeddings(texts_to_embed)
+        for (doc_id, chunk_text), vec in zip(chunks_to_insert, all_vecs):
+            vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
+            global_db.insert(id=doc_id, vector=vec_768, metadata={"source": req.title})
+            global_corpus[doc_id] = chunk_text
         
     # 3. Re-fit BM25
     global_bm25.fit(global_corpus)
@@ -1394,12 +1489,12 @@ async def api_pipeline_run(req: UnifiedPipelineRequest):
     cost = decision.estimated_cost_per_1k_tokens
     global_tracer.end_span(outputs={"selected_model": model, "complexity": decision.complexity_category})
     
-    # Paso 3: Embedding Generator (Mock real de 64 dimensiones)
+    # Paso 3: Embedding Generator (Contrastive Transformer de 768 dimensiones)
     global_tracer.start_span("3. Text Embedding Encoder (contrastive-embedding-trainer)")
-    provider = MockEmbeddingProvider(dimension=64)
+    provider = MockEmbeddingProvider(dimension=768)
     q_vec = provider.get_embeddings([clean])[0]
-    q_vec_64 = q_vec[:64] if len(q_vec) >= 64 else q_vec + [0.0]*(64-len(q_vec))
-    global_tracer.end_span(outputs={"vector_dimensions": len(q_vec_64)})
+    q_vec_768 = q_vec[:768] if len(q_vec) >= 768 else q_vec + [0.0]*(768-len(q_vec))
+    global_tracer.end_span(outputs={"vector_dimensions": len(q_vec_768)})
     
     # Paso 4: Búsqueda Híbrida (Pipeline real sobre PROJECTS.md)
     global_tracer.start_span("4. Hybrid Retrieval Search (hybrid-search-retrieval-pipeline)")
@@ -1408,7 +1503,7 @@ async def api_pipeline_run(req: UnifiedPipelineRequest):
     sparse_res = global_bm25.retrieve(clean, top_k=3)
     
     # 4.2. Dense Retrieval (HNSW NanoVectorDB real)
-    dense_raw = global_db.query(vector=q_vec_64, top_k=3)
+    dense_raw = global_db.query(vector=q_vec_768, top_k=3)
     dense_res = [(r["distance"], r["id"]) for r in dense_raw]
     
     # 4.3. Fusion (Score Fusion real)
