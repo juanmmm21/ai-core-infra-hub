@@ -1230,7 +1230,7 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
             # Formateamos el prompt en formato de instrucciones para Qwen-Instruct
             formatted_prompt = (
                 "<|im_start|>system\n"
-                "Eres un asistente de IA experto en infraestructura y análisis de documentos. Tu objetivo es responder la pregunta del usuario en español de forma concisa, clara, directa y estructurada (usando viñetas si es necesario), basándote ÚNICAMENTE en el contexto proporcionado. No inventes datos. Si el contexto no contiene la respuesta directa, explica qué partes relacionadas se mencionan o di que no está en el documento.\n"
+                "Responde la pregunta del usuario en español basándote únicamente en el contexto recuperado de forma detallada y estructurada usando viñetas.\n"
                 "<|im_end|>\n"
                 "<|im_start|>user\n"
                 f"Contexto recuperado:\n{context}\n\n"

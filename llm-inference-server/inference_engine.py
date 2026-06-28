@@ -90,7 +90,9 @@ class InferenceEngine:
                     outputs = self.model.generate(
                         **inputs,
                         max_new_tokens=max_tokens,
-                        do_sample=False,
+                        do_sample=True,
+                        temperature=0.1,
+                        repetition_penalty=1.15,
                         pad_token_id=self.tokenizer.pad_token_id
                     )
                 
