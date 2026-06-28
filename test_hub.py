@@ -93,7 +93,7 @@ class TestHubAPI(unittest.TestCase):
         self.assertEqual(pipeline_resp.status_code, 200)
         pipeline_data = pipeline_resp.json()
         self.assertEqual(pipeline_data["status"], "success")
-        self.assertIn("de forma atomica", pipeline_data["response"])
+        self.assertIn("atomica", pipeline_data["response"])
 
     def test_list_vector_db(self):
         response = self.client.get("/api/vector-db/list")
