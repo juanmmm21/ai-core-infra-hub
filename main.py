@@ -632,7 +632,7 @@ def init_global_pipeline():
         global_bm25.fit({"doc_default": "La infraestructura unificada de IA conecta todos los submodulos."})
         
     # 4. Initialize remaining system components
-    global_reranker = CrossEncoderReranker(model_name="dummy")
+    global_reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
     global_memory = AgenticMemory(decay_factor=0.01, vector_dim=16)
     global_memory.save_fact("El usuario prefiere respuestas tecnicas y explicaciones con formulas matematicas.", importance=9)
     global_memory.save_fact("Los subproyectos de la infraestructura estan construidos artesanalmente en Python.", importance=8)
@@ -1587,10 +1587,10 @@ async def api_pipeline_run(req: UnifiedPipelineRequest):
     global_tracer.start_span("4. Hybrid Retrieval Search (hybrid-search-retrieval-pipeline)")
     
     # 4.1. Sparse Retrieval (BM25 real)
-    sparse_res = global_bm25.retrieve(clean, top_k=3)
+    sparse_res = global_bm25.retrieve(clean, top_k=15)
     
     # 4.2. Dense Retrieval (HNSW NanoVectorDB real)
-    dense_raw = global_db.query(vector=q_vec_768, top_k=3)
+    dense_raw = global_db.query(vector=q_vec_768, top_k=15)
     dense_res = [(r["distance"], r["id"]) for r in dense_raw]
     
     # 4.3. Fusion (Score Fusion real)
@@ -1599,7 +1599,15 @@ async def api_pipeline_run(req: UnifiedPipelineRequest):
     candidates = []
     for score, doc_id in fused_results:
         content = global_corpus.get(doc_id, "Documento de la infraestructura de IA")
-        candidates.append({"id": doc_id, "text": content, "score": score})
+        doc_id_str = str(doc_id)
+        source_name = doc_id_str
+        for sep in ["_chunk_", "_sentence_", "_page_"]:
+            if sep in doc_id_str:
+                source_name = doc_id_str.split(sep)[0]
+                break
+        source_clean = source_name.replace("file_", "").replace(".pdf", "").replace(".txt", "").replace(".md", "").replace("-", " ").replace("_", " ")
+        augmented_content = f"Documento {source_clean}:\n{content}"
+        candidates.append({"id": doc_id, "text": augmented_content, "score": score})
         
     global_tracer.end_span(outputs={"candidates_retrieved": len(candidates)})
     
