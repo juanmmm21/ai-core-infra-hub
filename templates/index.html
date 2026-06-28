@@ -12,15 +12,15 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         :root {
-            --bg-color: #0b0c10;
-            --sidebar-color: #1f2833;
-            --accent-purple: #8a2be2;
-            --accent-pink: #ff1493;
-            --accent-cyan: #00ffff;
-            --text-primary: #c5c6c7;
-            --text-light: #ffffff;
-            --border-color: #45f3ff22;
-            --card-bg: #151a22;
+            --bg-color: #090d16;
+            --sidebar-color: #111625;
+            --accent-purple: #6366f1;
+            --accent-pink: #ec4899;
+            --accent-cyan: #06b6d4;
+            --text-primary: #cbd5e1;
+            --text-light: #f8fafc;
+            --border-color: #232d3f;
+            --card-bg: #171e2e;
         }
 
         * {
@@ -53,15 +53,15 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
         }
 
         .logo-icon {
             width: 36px;
             height: 36px;
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            background-color: var(--accent-purple);
             border-radius: 8px;
-            box-shadow: 0 0 15px rgba(138, 43, 226, 0.6);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
         }
 
         .logo-title {
@@ -71,13 +71,29 @@
             letter-spacing: 0.5px;
         }
 
-        .category-title {
+        .sidebar-section-title {
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
+            color: var(--accent-purple);
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: var(--accent-cyan);
-            margin: 20px 0 10px 0;
+            margin: 20px 0 8px 0;
+            padding-left: 8px;
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background-color: var(--border-color);
+            margin: 20px 0;
+        }
+
+        .category-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #64748b;
+            margin: 16px 0 8px 8px;
         }
 
         .nav-item {
@@ -100,8 +116,8 @@
         }
 
         .nav-item.active {
-            background: linear-gradient(90deg, rgba(138, 43, 226, 0.2), rgba(255, 20, 147, 0.1));
-            border-left: 3px solid var(--accent-pink);
+            background-color: #1e293b;
+            border-left: 3px solid var(--accent-purple);
             color: var(--text-light);
         }
 
@@ -111,7 +127,7 @@
             display: flex;
             flex-direction: column;
             overflow-y: auto;
-            background: radial-gradient(circle at top right, #120e25, #0b0c10);
+            background-color: var(--bg-color);
             padding: 40px;
         }
 
@@ -187,7 +203,7 @@
 
         input[type="text"], textarea, select {
             width: 100%;
-            background-color: #0b0c10;
+            background-color: var(--bg-color);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             color: var(--text-light);
@@ -208,42 +224,63 @@
         }
 
         .btn {
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            background-color: var(--accent-purple);
             color: var(--text-light);
             border: none;
             border-radius: 6px;
             padding: 12px 24px;
             font-weight: 600;
             cursor: pointer;
-            transition: opacity 0.2s, transform 0.1s;
+            transition: background-color 0.2s, transform 0.1s;
             display: inline-flex;
             align-items: center;
             gap: 8px;
         }
 
         .btn:hover {
-            opacity: 0.9;
+            background-color: #4f46e5;
         }
 
         .btn:active {
             transform: scale(0.98);
         }
 
+        .btn-secondary {
+            background-color: var(--border-color);
+            color: var(--text-primary);
+            border: 1px solid #374151;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            height: auto;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-secondary:hover {
+            background-color: #374151;
+            color: var(--text-light);
+        }
+
         .output-box {
-            background-color: #0b0c10;
-            border: 1px solid #1f2833;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 16px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
-            color: #00ff66;
+            color: #10b981;
             overflow-x: auto;
             white-space: pre-wrap;
             max-height: 300px;
         }
 
         .response-premium {
-            background-color: #151a22;
+            background-color: var(--bg-color);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 20px;
@@ -253,12 +290,11 @@
             overflow-y: auto;
             line-height: 1.6;
             max-height: 480px;
-            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
         }
 
         .inspect-item {
-            background-color: #0b0c10;
-            border: 1px solid #1f2833;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 8px;
@@ -268,14 +304,14 @@
 
         .inspect-item:hover {
             border-color: var(--accent-purple);
-            box-shadow: 0 0 10px rgba(138, 43, 226, 0.2);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
         }
 
         /* SVG Graph Canvas */
         .graph-container {
             width: 100%;
             height: 250px;
-            background-color: #0b0c10;
+            background-color: var(--bg-color);
             border-radius: 6px;
             border: 1px solid var(--border-color);
             position: relative;
@@ -299,7 +335,7 @@
 
         .telemetry-meta {
             font-size: 12px;
-            color: #8892b0;
+            color: #64748b;
         }
     </style>
 </head>
@@ -312,7 +348,12 @@
             <div class="logo-title">AI Core Infra</div>
         </div>
 
-        <div class="nav-item active" onclick="switchTab('tab-unified')">🚀 Unified Pipeline</div>
+        <div class="sidebar-section-title">🚀 Sistema Principal</div>
+        <div class="nav-item active" onclick="switchTab('tab-unified')">Pipeline de Producción</div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="sidebar-section-title">🧪 Banco de Pruebas</div>
 
         <div class="category-title">1. Data & Ingest</div>
         <div class="nav-item" onclick="switchTab('tab-bpe')">📁 BPE Tokenizer</div>
@@ -370,7 +411,7 @@
                         <div class="input-group">
                             <label class="input-label">Opción 1: Subir Archivo (PDF, TXT, MD, PY, JSON...)</label>
                             <input type="file" id="doc-file-input" style="width: 100%; color: var(--text-light); margin-bottom: 12px; font-family: inherit;">
-                            <button class="btn" onclick="uploadFileForTraining()" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));">Subir e Indexar Archivo</button>
+                            <button class="btn" onclick="uploadFileForTraining()">Subir e Indexar Archivo</button>
                         </div>
                         <div style="text-align: center; margin: 16px 0; color: #8892b0; font-size: 13px; font-weight: 500;">— O TAMBIÉN —</div>
                         <div class="input-group">
@@ -402,7 +443,7 @@
                                 <span>Visor e Inspector de NanoVectorDB</span>
                                 <span id="db-inspect-count" style="font-size: 12px; color: #8892b0; font-weight: 400;">(0 chunks)</span>
                             </div>
-                            <button class="btn" onclick="loadVectorDbRecords()" style="padding: 6px 12px; font-size: 12px; background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); font-weight: 500; height: auto;">↻ Actualizar</button>
+                            <button class="btn btn-secondary" onclick="loadVectorDbRecords()">↻ Actualizar</button>
                         </div>
                         <div class="input-group" style="margin-top: 12px; margin-bottom: 12px;">
                             <input type="text" id="db-inspect-filter" placeholder="🔍 Filtrar registros por ID, contenido o fuente..." oninput="filterInspectRecords()">
@@ -1207,8 +1248,8 @@ print("Listado de archivos:", os.listdir("."))</textarea>
                     </div>
                 `;
             } else {
-                const modelBadge = `<span style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan)); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">${res.model}</span>`;
-                const costBadge = `<span style="background: linear-gradient(135deg, var(--accent-pink), #ff5e62); color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">Costo Estimado: $${res.cost}</span>`;
+                const modelBadge = `<span style="background-color: #1e1b4b; color: #a5b4fc; border: 1px solid #4338ca; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">${res.model}</span>`;
+                const costBadge = `<span style="background-color: #4c0519; color: #fda4af; border: 1px solid #be123c; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">Costo Estimado: $${res.cost}</span>`;
                 
                 const formattedHtml = formatMarkdownToHtml(res.response);
                 
