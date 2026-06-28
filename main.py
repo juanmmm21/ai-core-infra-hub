@@ -493,6 +493,7 @@ global_shield = None
 global_router = None
 global_runtime = None
 global_reranker = None
+global_inference_engine = None
 global_corpus = {}
 
 # Fallback fusion functions if not imported
@@ -550,7 +551,7 @@ def save_global_pipeline_state():
             logger.error(f"[-] Failed to save persistent database: {e}")
 
 def init_global_pipeline():
-    global global_db, global_bm25, global_memory, global_shield, global_router, global_runtime, global_corpus, global_reranker
+    global global_db, global_bm25, global_memory, global_shield, global_router, global_runtime, global_corpus, global_reranker, global_inference_engine
     
     provider = MockEmbeddingProvider(dimension=768)
     loaded_from_disk = False
@@ -639,6 +640,14 @@ def init_global_pipeline():
     global_router = SemanticModelRouter()
     global_runtime = SecureToolRuntime()
     
+    if global_inference_engine is None:
+        try:
+            global_inference_engine = InferenceEngine(model_name="Qwen/Qwen2.5-0.5B-Instruct", use_local_model=True)
+            logger.info("[+] Loaded local InferenceEngine with Qwen/Qwen2.5-0.5B-Instruct.")
+        except Exception as e:
+            logger.error(f"[-] Failed to load local InferenceEngine: {e}")
+            global_inference_engine = None
+            
     logger.info(f"[+] Global pipeline setup complete. Ready to serve requests.")
 
 @app.on_event("startup")
@@ -1155,6 +1164,7 @@ def api_telemetry():
 
 # 21. UNIFIED PIPELINE SIMULATOR (Concordancia completa de todos los módulos)
 def generate_agent_response(prompt: str, context: str, memories: List[str]) -> str:
+    global global_inference_engine
     prompt_clean = prompt.strip()
     
     # Conversational greetings check
@@ -1203,6 +1213,48 @@ def generate_agent_response(prompt: str, context: str, memories: List[str]) -> s
     import re
     docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |\n\nRecuerdo de Memoria|$)", context, re.DOTALL)
     
+    # 1. Intentar inferencia real mediante modelo LLM local (Qwen2.5-0.5B-Instruct) si está disponible
+    if docs and global_inference_engine is not None and getattr(global_inference_engine, "use_local", False):
+        try:
+            # Clean source names
+            doc_ids = []
+            for doc_id, _ in docs:
+                for sep in ["_chunk_", "_sentence_", "_page_"]:
+                    if sep in doc_id:
+                        doc_id = doc_id.split(sep)[0]
+                        break
+                if doc_id not in doc_ids:
+                    doc_ids.append(doc_id)
+            source_display = ", ".join(doc_ids) if doc_ids else "desconocido"
+            
+            # Formateamos el prompt en formato de instrucciones para Qwen-Instruct
+            formatted_prompt = (
+                "<|im_start|>system\n"
+                "Eres un asistente de IA experto en infraestructura y análisis de documentos. Tu objetivo es responder la pregunta del usuario en español de forma concisa, clara, directa y estructurada (usando viñetas si es necesario), basándote ÚNICAMENTE en el contexto proporcionado. No inventes datos. Si el contexto no contiene la respuesta directa, explica qué partes relacionadas se mencionan o di que no está en el documento.\n"
+                "<|im_end|>\n"
+                "<|im_start|>user\n"
+                f"Contexto recuperado:\n{context}\n\n"
+                f"Pregunta: {prompt_clean}\n"
+                "<|im_end|>\n"
+                "<|im_start|>assistant\n"
+            )
+            
+            logger.info("[+] Generando respuesta de RAG real con el modelo local Qwen...")
+            responses = global_inference_engine.generate_batch([formatted_prompt], max_tokens=250)
+            if responses and responses[0].strip():
+                ans = responses[0].strip()
+                ans = ans.split("<|im_end|>")[0].split("<|im_start|>")[0].strip()
+                
+                response = (
+                    f"### 📝 Respuesta del Agente:\n"
+                    f"Basado en el documento **{source_display}** cargado en la base de datos:\n\n"
+                    f"{ans}\n"
+                )
+                return response
+        except Exception as e:
+            logger.error(f"[-] Error en inferencia de LLM local: {e}. Usando fallback de sintesis por reglas...")
+            
+    # 2. Fallback de síntesis estructurada basada en reglas
     if docs:
         prompt_normalized = normalize_text(prompt_clean)
         prompt_words = [w.strip("?,.:;!\"'()").lower() for w in prompt_normalized.split() if len(w) > 2]
