@@ -4,3 +4,5 @@ __pycache__/
 env/
 .dvc_hub_store/
 temp_parsing.pdf
+db_storage/
+
