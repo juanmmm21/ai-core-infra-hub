@@ -1,56 +1,56 @@
 
 
-## Descripcion Tecnica y Alcance
+## Technical Description and Scope
 
-El AI Core Infra Hub (ai-core-infra-hub) es una aplicacion de orquestacion y panel de control web unificado diseñado para integrar, ejecutar e inspeccionar las capacidades de los 21 subproyectos del repositorio ai-core-infra.
+The AI Core Infra Hub (ai-core-infra-hub) is a unified orchestration and web dashboard application designed to integrate, execute, and inspect the capabilities of the 21 subprojects in the ai-core-infra repository.
 
-Este componente actua como la interfaz interactiva central que unifica el procesamiento de datos, el almacenamiento vectorial, el enrutamiento semantico de inferencias, los sistemas de agentes autonomos y las suites de calidad en una Single Page Application (SPA).
+This component acts as the central interactive interface that unifies data processing, vector storage, semantic inference routing, autonomous agent systems, and quality suites into a Single Page Application (SPA).
 
 ---
 
-## Fundamento Matematico y Logica de Concordancia
+## Mathematical Foundation and Matching Logic
 
-El Hub coordina el flujo secuencial de datos de todos los modulos a traves de un simulador de pipeline completo, el cual calcula en tiempo real metricas de latencia y telemetria estructurada.
+The Hub coordinates the sequential data flow of all modules through a full pipeline simulator, which computes latency metrics and structured telemetry in real time.
 
-### 1. Curva de Retencion Episodica (Decaimiento de Ebbinghaus)
-La memoria a largo plazo integra un factor de decaimiento temporal exponencial para determinar la recuperacion factica:
+### 1. Episodic Retention Curve (Ebbinghaus Decay)
+Long-term memory incorporates an exponential temporal decay factor to determine factual recall:
 
 $$R(t) = e^{-\lambda \cdot \Delta t}$$
 
-Donde $R(t)$ representa la retencion de memoria final, $\lambda$ es la tasa de olvido configurada y $\Delta t$ es el tiempo transcurrido (en segundos) desde la creacion del recuerdo.
+Where $R(t)$ represents the final memory retention, $\lambda$ is the configured forgetting rate, and $\Delta t$ is the elapsed time (in seconds) since the memory was created.
 
-### 2. Clasificacion de Trigramas y Distancia Jaccard
-El enrutador semantico evalua la intencion de consultas rapidas calculando la similitud Jaccard de caracteres a nivel de tri-gramas:
+### 2. Trigram Classification and Jaccard Distance
+The semantic router evaluates the intent of quick queries by computing the character-level Jaccard similarity at the trigram level:
 
 $$J(A, B) = \frac{|A \cap B|}{|A \cup B|}$$
 
-Donde $A$ y $B$ son los conjuntos de tri-gramas extraidos de la consulta del usuario y del patron registrado.
+Where $A$ and $B$ are the sets of trigrams extracted from the user's query and from the registered pattern.
 
 ---
 
-## Estructuras de Datos y Configuracion
+## Data Structures and Configuration
 
-El Hub expone endpoints REST estructurados en FastAPI. A continuacion se detallan los esquemas clave:
+The Hub exposes REST endpoints structured with FastAPI. The key schemas are detailed below:
 
-### 1. Peticion del Pipeline Unificado (JSON Schema)
+### 1. Unified Pipeline Request (JSON Schema)
 ```json
 {
   "type": "object",
   "properties": {
     "prompt": {
       "type": "string",
-      "description": "Texto ingresado por el usuario"
+      "description": "Text entered by the user"
     },
     "context": {
       "type": "string",
-      "description": "Contexto factico adicional (opcional)"
+      "description": "Additional factual context (optional)"
     }
   },
   "required": ["prompt"]
 }
 ```
 
-### 2. Respuesta de la Inferencia (JSON Schema)
+### 2. Inference Response (JSON Schema)
 ```json
 {
   "type": "object",
@@ -80,67 +80,67 @@ El Hub expone endpoints REST estructurados en FastAPI. A continuacion se detalla
 
 ---
 
-## Instrucciones de Despliegue y Ejecucion
+## Deployment and Run Instructions
 
-### Requisitos Previos
-El Hub requiere Python 3.10+ y cuenta con su propio entorno virtual dedicado para asegurar aislamiento total de dependencias.
+### Prerequisites
+The Hub requires Python 3.10+ and has its own dedicated virtual environment to ensure full dependency isolation.
 
-### Instalacion de Dependencias y Entorno Virtual
-Para configurar el entorno virtual local e instalar las dependencias, ejecute en la carpeta del hub:
+### Installing Dependencies and the Virtual Environment
+To set up the local virtual environment and install dependencies, run from the hub folder:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Ejecucion del Servidor
-Arrancar la aplicacion mediante el script launcher:
+### Running the Server
+Start the application via the launcher script:
 ```bash
 python example.py
 ```
-El panel estara disponible en la direccion `http://127.0.0.1:8000`.
+The dashboard will be available at `http://127.0.0.1:8000`.
 
-### Ejecucion de Tests de Integracion
-Para comprobar el correcto funcionamiento de las APIs REST:
+### Running Integration Tests
+To check that the REST APIs work correctly:
 ```bash
 python test_hub.py
 ```
 
 ---
 
-## Interlinking y Arquitectura del Ecosistema (21 Proyectos Unificados)
+## Interlinking and Ecosystem Architecture (21 Unified Projects)
 
-El **AI Core Infra Hub** actúa como el gran director de orquesta e integrador del monorepo, consumiendo, importando u orquestando los **21 subproyectos** de la infraestructura de IA de forma integrada:
+The **AI Core Infra Hub** acts as the grand conductor and integrator of the monorepo, consuming, importing, or orchestrating the AI infrastructure's **21 subprojects** in an integrated way:
 
-### 1. Ingesta y Procesamiento de Datos
-*   **bpe-tokenizer-from-scratch:** Utilizado en `/api/bpe/tokenize` para pre-tokenizar textos en subpalabras y analizar estadísticas de codificación.
-*   **semantic-chunking-engine:** Segmenta documentos dinámicamente en base a la distancia de similitud y desviación estándar en `/api/chunker/chunk`.
-*   **multimodal-doc-parser:** Parser de documentos unificado en `/api/documents/upload-file` que extrae texto estructurado de PDFs complejos.
-*   **llm-annotation-studio:** Simulación de estudio de etiquetado y corrección DPO en `/api/annotation/label` para optimización humana.
+### 1. Data Ingestion and Processing
+*   **bpe-tokenizer-from-scratch:** Used at `/api/bpe/tokenize` to pre-tokenize text into subwords and analyze encoding statistics.
+*   **semantic-chunking-engine:** Dynamically segments documents based on similarity distance and standard deviation at `/api/chunker/chunk`.
+*   **multimodal-doc-parser:** Unified document parser at `/api/documents/upload-file` that extracts structured text from complex PDFs.
+*   **llm-annotation-studio:** Labeling studio and DPO correction simulation at `/api/annotation/label` for human optimization.
 
-### 2. Almacenamiento, Representación y Recuperación (RAG)
-*   **contrastive-embedding-trainer:** Provee el codificador de texto real (`SiameseTransformer`) de 768 dimensiones entrenado con Triplet Cosine Loss en PyTorch para generar embeddings vectoriales semánticos de producción.
-*   **nano-vector-db:** Almacenamiento vectorial en memoria indexado por HNSW que indexa los READMEs de los subproyectos y los documentos cargados.
-*   **knowledge-graph-extractor:** Extrae entidades y relaciones en formato de tripleta semántica en el endpoint `/api/knowledge-graph/extract`.
-*   **hybrid-search-retrieval-pipeline:** Motor que realiza la búsqueda de dos fases combinando la base HNSW con el recuperador BM25 local.
-*   **cross-encoder-reranker:** Re-ordena los candidatos recuperados en base a una puntuación de similitud semántica y léxica fina en `/api/pipeline/run`.
+### 2. Storage, Representation, and Retrieval (RAG)
+*   **contrastive-embedding-trainer:** Provides the real text encoder (`SiameseTransformer`), a 768-dimensional model trained with Triplet Cosine Loss in PyTorch, to generate production-grade semantic vector embeddings.
+*   **nano-vector-db:** In-memory vector storage indexed with HNSW that indexes the subprojects' READMEs and uploaded documents.
+*   **knowledge-graph-extractor:** Extracts entities and relations in semantic triple format at the `/api/knowledge-graph/extract` endpoint.
+*   **hybrid-search-retrieval-pipeline:** Engine that performs two-phase search, combining the HNSW base with the local BM25 retriever.
+*   **cross-encoder-reranker:** Re-ranks retrieved candidates based on a fine-grained semantic and lexical similarity score at `/api/pipeline/run`.
 
-### 3. Inferencia, Ciclo de Vida y Seguridad
-*   **llm-inference-server:** Servidor simulado de inferencia en `/api/inference/run` con capacidades de transmisión (streaming) de tokens.
-*   **semantic-model-router:** Clasifica la complejidad semántica de los prompts de entrada y enruta la petición al perfil de modelo óptimo (coste vs latencia).
-*   **llm-guardrails-shield:** Cortafuegos bidireccional en `/api/guardrails/check` que escanea prompts y respuestas buscando inyecciones de código, insultos o fugas de secretos (API keys).
+### 3. Inference, Lifecycle, and Security
+*   **llm-inference-server:** Simulated inference server at `/api/inference/run` with token streaming capability.
+*   **semantic-model-router:** Classifies the semantic complexity of input prompts and routes the request to the optimal model profile (cost vs. latency).
+*   **llm-guardrails-shield:** Bidirectional firewall at `/api/guardrails/check` that scans prompts and responses for code injections, insults, or secret leaks (API keys).
 
-### 4. Agentes Autónomos y Sandbox
-*   **orchestra-agents:** Orquesta la ejecución final con bucles de pensamiento-acción del agente autónomo (ReAct) en el pipeline de RAG.
-*   **agentic-memory-layer:** Conecta la memoria a largo plazo episódica utilizando decaimiento exponencial y la base de datos vectorial para dar persistencia al agente.
-*   **secure-tool-runtime:** Simulación de entorno seguro y aislado (sandbox) en el que los agentes pueden ejecutar scripts de Python o APIs externas.
+### 4. Autonomous Agents and Sandbox
+*   **orchestra-agents:** Orchestrates final execution with the autonomous agent's thought-action loops (ReAct) in the RAG pipeline.
+*   **agentic-memory-layer:** Connects episodic long-term memory using exponential decay and the vector database to give the agent persistence.
+*   **secure-tool-runtime:** Simulation of a secure, isolated environment (sandbox) in which agents can execute Python scripts or external APIs.
 
-### 5. MLOps, Calidad e Historial
-*   **synthetic-data-generator:** Motor de generación y filtrado de prompts sintéticos en `/api/synthetic/generate`.
-*   **dataset-version-control:** Permite realizar comparativas (diffs) de registros estructurados y control de versiones en `/api/datasets/diff`.
-*   **llm-qlora-finetuner:** Muestra curvas de pérdida histórica y simula el entrenamiento LoRA/PEFT en el endpoint `/api/finetuner/train`.
-*   **llm-eval-harness:** Compara respuestas candidatas con referencias calculando métricas clásicas (BLEU, Jaccard, similitud coseno) en `/api/eval/benchmark`.
-*   **llm-observability-tracer:** Motor de trazabilidad que mide tiempos, costes de tokens y latencias, renderizando el árbol jerárquico de Spans (telemetría unificada).
+### 5. MLOps, Quality, and History
+*   **synthetic-data-generator:** Engine for generating and filtering synthetic prompts at `/api/synthetic/generate`.
+*   **dataset-version-control:** Enables comparisons (diffs) of structured records and version control at `/api/datasets/diff`.
+*   **llm-qlora-finetuner:** Shows historical loss curves and simulates LoRA/PEFT training at the `/api/finetuner/train` endpoint.
+*   **llm-eval-harness:** Compares candidate responses against references, computing classic metrics (BLEU, Jaccard, cosine similarity) at `/api/eval/benchmark`.
+*   **llm-observability-tracer:** Tracing engine that measures times, token costs, and latencies, rendering the hierarchical Span tree (unified telemetry).
 
-### 6. Interfaz e Integración Final
-*   **nexus-second-brain:** Sirve de base conceptual para la interfaz SPA unificada (`index.html`) que integra los 21 módulos en un panel de control interactivo, con buscador en tiempo real, grafos visuales de telemetría y consola de chat del agente.
+### 6. Interface and Final Integration
+*   **nexus-second-brain:** Serves as the conceptual foundation for the unified SPA interface (`index.html`) that integrates the 21 modules into an interactive dashboard, with real-time search, visual telemetry graphs, and an agent chat console.
