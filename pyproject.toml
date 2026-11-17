@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aicore"
+version = "0.1.0"
+description = "AI Core SDK: one stable, typed API over the ai-core components (RAG, agents, ops)."
+readme = "docs/sdk.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Juan Martos Cuevas", email = "martoscuevasjuan@gmail.com" }]
+# The core (types, adapters' protocols, embedders, the OpenAI-compatible client) needs only
+# NumPy. Each area pulls its components; a component is never imported until its area is used.
+dependencies = ["numpy>=1.20"]
+
+# The components are installed straight from their repositories (PEP 508 direct references),
+# as nanosql does with the strata engines. They never import each other: this SDK is the only
+# place where their types meet, through `aicore.adapters`.
+#
+# While the roadmap is in progress every reference points at the `feat/ai-core-roadmap`
+# branches. Merge order: components -> tags vX.Y.Z -> these references pinned to the tags.
+[project.optional-dependencies]
+rag = [
+    "bpe-tokenizer-from-scratch @ git+https://github.com/juanmmm21/bpe-tokenizer-from-scratch.git@feat/ai-core-roadmap",
+    "semantic-chunking-engine @ git+https://github.com/juanmmm21/semantic-chunking-engine.git@feat/ai-core-roadmap",
+    "multimodal-doc-parser @ git+https://github.com/juanmmm21/multimodal-doc-parser.git@feat/ai-core-roadmap",
+    "nano-vector-db @ git+https://github.com/juanmmm21/nano-vector-db.git@v0.1.0",
+    "knowledge-graph-extractor @ git+https://github.com/juanmmm21/knowledge-graph-extractor.git@feat/ai-core-roadmap",
+    "hybrid-search-retrieval-pipeline @ git+https://github.com/juanmmm21/hybrid-search-retrieval-pipeline.git@feat/ai-core-roadmap",
+    "cross-encoder-reranker @ git+https://github.com/juanmmm21/cross-encoder-reranker.git@feat/ai-core-roadmap",
+]
+agents = [
+    "semantic-model-router @ git+https://github.com/juanmmm21/semantic-model-router.git@feat/ai-core-roadmap",
+    "llm-guardrails-shield @ git+https://github.com/juanmmm21/llm-guardrails-shield.git@feat/ai-core-roadmap",
+    "orchestra-agents @ git+https://github.com/juanmmm21/orchestra-agents.git@feat/ai-core-roadmap",
+    "agentic-memory-layer @ git+https://github.com/juanmmm21/agentic-memory-layer.git@feat/ai-core-roadmap",
+    "secure-tool-runtime @ git+https://github.com/juanmmm21/secure-tool-runtime.git@feat/ai-core-roadmap",
+]
+ops = [
+    "httpx>=0.24",
+    "llm-inference-server @ git+https://github.com/juanmmm21/llm-inference-server.git@feat/ai-core-roadmap",
+    "llm-observability-tracer @ git+https://github.com/juanmmm21/llm-observability-tracer.git@feat/ai-core-roadmap",
+    "llm-eval-harness @ git+https://github.com/juanmmm21/llm-eval-harness.git@feat/ai-core-roadmap",
+    "synthetic-data-generator @ git+https://github.com/juanmmm21/synthetic-data-generator.git@feat/ai-core-roadmap",
+    "dataset-version-control @ git+https://github.com/juanmmm21/dataset-version-control.git@feat/ai-core-roadmap",
+    "llm-annotation-studio @ git+https://github.com/juanmmm21/llm-annotation-studio.git@feat/ai-core-roadmap",
+]
+# PyTorch-heavy pieces, kept apart so `rag`, `agents` and `ops` stay light.
+train = [
+    "llm-qlora-finetuner @ git+https://github.com/juanmmm21/llm-qlora-finetuner.git@feat/ai-core-roadmap",
+    "contrastive-embedding-trainer @ git+https://github.com/juanmmm21/contrastive-embedding-trainer.git@v0.1.0",
+]
+all = ["aicore[rag,agents,ops,train]"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "fastapi>=0.100", "httpx>=0.24", "python-multipart>=0.0.6"]
+
+[project.urls]
+Repository = "https://github.com/juanmmm21/ai-core-infra-hub"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aicore"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "test_hub.py"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["main.py", "test_hub.py", "example.py", "*-*/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+files = ["src/aicore"]
+# The components publish no type information; adapters meet them as `Any`.
+[[tool.mypy.overrides]]
+module = [
+    "bpe_tokenizer_from_scratch.*", "semantic_chunking_engine.*", "multimodal_doc_parser.*",
+    "nano_vector_db.*", "knowledge_graph_extractor.*", "hybrid_search_retrieval_pipeline.*",
+    "cross_encoder_reranker.*", "semantic_model_router.*", "llm_guardrails_shield.*",
+    "orchestra_agents.*", "agentic_memory_layer.*", "secure_tool_runtime.*",
+    "llm_inference_server.*", "llm_observability_tracer.*", "llm_eval_harness.*",
+    "synthetic_data_generator.*", "dataset_version_control.*", "llm_annotation_studio.*",
+    "llm_qlora_finetuner.*", "contrastive_embedding_trainer.*",
+    "sentence_transformers.*",
+]
+ignore_missing_imports = true

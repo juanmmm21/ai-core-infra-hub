@@ -6,3 +6,9 @@ env/
 temp_parsing.pdf
 db_storage/
 
+annotation.db
+*.egg-info/
+build/
+dist/
+.ruff_cache/
+.mypy_cache/
