@@ -1,0 +1,11 @@
+{
+  "version": "v1",
+  "registered_at": 1794926375.2620583,
+  "round": "r1-baseline",
+  "candidate": "hashed",
+  "data": {
+    "train": "c79c0cb4c12098958cbadfa4f6b7cdba2fc50686",
+    "eval": "dfcdab6fe3c636682115f35d93c69f850c1d3a9f"
+  },
+  "options": {}
+}

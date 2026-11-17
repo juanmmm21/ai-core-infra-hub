@@ -1,0 +1,148 @@
+{
+  "round": "r1-baseline",
+  "seed": 1,
+  "data_commits": {
+    "train": "c79c0cb4c12098958cbadfa4f6b7cdba2fc50686",
+    "eval": "dfcdab6fe3c636682115f35d93c69f850c1d3a9f"
+  },
+  "sizes": {
+    "train": 128,
+    "eval": 52,
+    "validation": 26
+  },
+  "champion_before": null,
+  "champion_before_report": null,
+  "candidates": [
+    {
+      "name": "hashed",
+      "version": "v1",
+      "train_seconds": 0.12956605300041701,
+      "report": {
+        "n": 52,
+        "accuracy": 0.8076923076923077,
+        "macro_f1": 0.8081128747795415,
+        "per_class": {
+          "general": {
+            "precision": 0.7857142857142857,
+            "recall": 0.8461538461538461,
+            "f1": 0.8148148148148148,
+            "support": 13.0
+          },
+          "project": {
+            "precision": 1.0,
+            "recall": 0.6666666666666666,
+            "f1": 0.8,
+            "support": 21.0
+          },
+          "trivial": {
+            "precision": 0.7083333333333334,
+            "recall": 0.9444444444444444,
+            "f1": 0.8095238095238096,
+            "support": 18.0
+          }
+        },
+        "confusion": {
+          "general": {
+            "general": 11,
+            "project": 0,
+            "trivial": 2
+          },
+          "project": {
+            "general": 2,
+            "project": 14,
+            "trivial": 5
+          },
+          "trivial": {
+            "general": 1,
+            "project": 0,
+            "trivial": 17
+          }
+        },
+        "latency_ms_p50": 0.15527799996561953,
+        "latency_ms_p95": 0.35952539969912317,
+        "errors": [
+          {
+            "text": "venga, cotninúa",
+            "context": [
+              "active_project"
+            ],
+            "gold": "project",
+            "predicted": "trivial"
+          },
+          {
+            "text": "dale",
+            "context": [
+              "active_project"
+            ],
+            "gold": "project",
+            "predicted": "trivial"
+          },
+          {
+            "text": "una cosa: ok perfceto",
+            "context": [],
+            "gold": "trivial",
+            "predicted": "general"
+          },
+          {
+            "text": "a ver, sigue",
+            "context": [
+              "recent_general"
+            ],
+            "gold": "general",
+            "predicted": "trivial"
+          },
+          {
+            "text": "anadele el exportador CSV",
+            "context": [
+              "named_project"
+            ],
+            "gold": "project",
+            "predicted": "general"
+          },
+          {
+            "text": "¿cómo va Lumen?",
+            "context": [],
+            "gold": "project",
+            "predicted": "trivial"
+          },
+          {
+            "text": "continúa",
+            "context": [
+              "active_project"
+            ],
+            "gold": "project",
+            "predicted": "trivial"
+          },
+          {
+            "text": "mándaselo a Ana",
+            "context": [
+              "recent_general"
+            ],
+            "gold": "general",
+            "predicted": "trivial"
+          },
+          {
+            "text": "oye implementa la API en Atlas",
+            "context": [],
+            "gold": "project",
+            "predicted": "general"
+          },
+          {
+            "text": "continua",
+            "context": [
+              "active_project"
+            ],
+            "gold": "project",
+            "predicted": "trivial"
+          }
+        ]
+      },
+      "promoted": true,
+      "reasons": [
+        "first model: champion by default"
+      ]
+    }
+  ],
+  "champion_after": "v1",
+  "seconds": 0.19981064400053583
+}

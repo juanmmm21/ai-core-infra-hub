@@ -1,0 +1,14 @@
+{
+  "kind": "hashed-logreg",
+  "labels": [
+    "project",
+    "general",
+    "trivial"
+  ],
+  "meta": {
+    "best_epoch": 85,
+    "val_accuracy": 0.948509485094851,
+    "train_examples": 1334,
+    "epochs": 100
+  }
+}

@@ -91,16 +91,25 @@ class RouterImprovementLoop:
             predict, [r["text"] for r in rows], [r["label"] for r in rows], [r["context"] for r in rows]
         )
 
-    def _train(self, kind: str, rows: list[dict[str, Any]], options: dict[str, Any]) -> Any:
+    def _train(
+        self, kind: str, rows: list[dict[str, Any]], options: dict[str, Any], val_rows: list[dict[str, Any]] | None
+    ) -> Any:
         texts = [r["text"] for r in rows]
         labels = [r["label"] for r in rows]
         contexts = [r["context"] for r in rows]
+        fit = dict(options.get("fit", {}))
+        if val_rows:
+            fit["validation"] = (
+                [r["text"] for r in val_rows],
+                [r["label"] for r in val_rows],
+                [r["context"] for r in val_rows],
+            )
         if kind == "hashed":
-            return self.router.IntentClassifier(self.labels).fit(texts, labels, contexts, **options.get("fit", {}))
+            return self.router.IntentClassifier(self.labels).fit(texts, labels, contexts, **fit)
         if kind == "lora":
             finetuner = component("train", "llm_qlora_finetuner")
             clf = finetuner.LoraClassifier(self.labels, **options.get("init", {}))
-            return clf.fit(texts, labels, contexts, **options.get("fit", {}))
+            return clf.fit(texts, labels, contexts, **fit)
         raise ValueError(f"unknown candidate kind {kind!r}")
 
     def run(
@@ -126,6 +135,9 @@ class RouterImprovementLoop:
         # round's evaluation templates and win by memory, not by quality.
         train_s, eval_s = self.gen.split(samples, eval_fraction, seed=split_seed)
         train_rows, eval_rows = [_record(s) for s in train_s], [_record(s) for s in eval_s]
+        # Early stopping looks at templates held out of *training* (never at the evaluation set).
+        inner_s, val_s = self.gen.split(train_s, 0.2, seed=split_seed + 1)
+        inner_rows, val_rows = [_record(s) for s in inner_s], [_record(s) for s in val_s]
         commits = {}
         for name, rows in (("train", train_rows), ("eval", eval_rows)):
             path = os.path.join(self.workdir, "data", f"router_{name}.json")
@@ -139,14 +151,17 @@ class RouterImprovementLoop:
             round=round_name,
             seed=seed,
             data_commits=commits,
-            sizes={"train": len(train_rows), "eval": len(eval_rows)},
+            sizes={"train": len(train_rows), "eval": len(eval_rows), "validation": len(val_rows)},
             champion_before=champion,
             champion_before_report=champ_report.to_dict() if champ_report else None,
         )
         champ_card = scorecard_from_report(champion, champ_report) if champion and champ_report else None
         for name, options in candidates.items():
             t0 = time.perf_counter()
-            model = self._train(options["kind"], train_rows, options)
+            early = options.get("early_stopping", True)
+            model = self._train(
+                options["kind"], inner_rows if early else train_rows, options, val_rows if early else None
+            )
             train_seconds = time.perf_counter() - t0
             version = self.registry.register(
                 model, {"round": round_name, "candidate": name, "data": commits, "options": options.get("fit", {})}

@@ -1,0 +1,1104 @@
+{
+  "r1": {
+    "round": "r1-baseline",
+    "seed": 1,
+    "data_commits": {
+      "train": "c79c0cb4c12098958cbadfa4f6b7cdba2fc50686",
+      "eval": "dfcdab6fe3c636682115f35d93c69f850c1d3a9f"
+    },
+    "sizes": {
+      "train": 128,
+      "eval": 52,
+      "validation": 26
+    },
+    "champion_before": null,
+    "champion_before_report": null,
+    "candidates": [
+      {
+        "name": "hashed",
+        "version": "v1",
+        "train_seconds": 0.12956605300041701,
+        "report": {
+          "n": 52,
+          "accuracy": 0.8076923076923077,
+          "macro_f1": 0.8081128747795415,
+          "per_class": {
+            "general": {
+              "precision": 0.7857142857142857,
+              "recall": 0.8461538461538461,
+              "f1": 0.8148148148148148,
+              "support": 13.0
+            },
+            "project": {
+              "precision": 1.0,
+              "recall": 0.6666666666666666,
+              "f1": 0.8,
+              "support": 21.0
+            },
+            "trivial": {
+              "precision": 0.7083333333333334,
+              "recall": 0.9444444444444444,
+              "f1": 0.8095238095238096,
+              "support": 18.0
+            }
+          },
+          "confusion": {
+            "general": {
+              "general": 11,
+              "project": 0,
+              "trivial": 2
+            },
+            "project": {
+              "general": 2,
+              "project": 14,
+              "trivial": 5
+            },
+            "trivial": {
+              "general": 1,
+              "project": 0,
+              "trivial": 17
+            }
+          },
+          "latency_ms_p50": 0.15527799996561953,
+          "latency_ms_p95": 0.35952539969912317,
+          "errors": [
+            {
+              "text": "venga, cotninúa",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "una cosa: ok perfceto",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "general"
+            },
+            {
+              "text": "a ver, sigue",
+              "context": [
+                "recent_general"
+              ],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "anadele el exportador CSV",
+              "context": [
+                "named_project"
+              ],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "¿cómo va Lumen?",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "continúa",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "mándaselo a Ana",
+              "context": [
+                "recent_general"
+              ],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "oye implementa la API en Atlas",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "continua",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            }
+          ]
+        },
+        "promoted": true,
+        "reasons": [
+          "first model: champion by default"
+        ]
+      }
+    ],
+    "champion_after": "v1",
+    "seconds": 0.19981064400053583
+  },
+  "r2": {
+    "round": "r2-improve",
+    "seed": 2,
+    "data_commits": {
+      "train": "0c47272333b36d22e8f8b22f198a6714c71619ab",
+      "eval": "bbc32a358906da77814bb122237c045bb6cf253f"
+    },
+    "sizes": {
+      "train": 635,
+      "eval": 265,
+      "validation": 100
+    },
+    "champion_before": "v1",
+    "champion_before_report": {
+      "n": 265,
+      "accuracy": 0.8981132075471698,
+      "macro_f1": 0.8970636409660799,
+      "per_class": {
+        "general": {
+          "precision": 0.8333333333333334,
+          "recall": 0.9895833333333334,
+          "f1": 0.9047619047619048,
+          "support": 96.0
+        },
+        "project": {
+          "precision": 0.9714285714285714,
+          "recall": 0.7906976744186046,
+          "f1": 0.8717948717948717,
+          "support": 86.0
+        },
+        "trivial": {
+          "precision": 0.9259259259259259,
+          "recall": 0.9036144578313253,
+          "f1": 0.9146341463414634,
+          "support": 83.0
+        }
+      },
+      "confusion": {
+        "general": {
+          "general": 95,
+          "project": 0,
+          "trivial": 1
+        },
+        "project": {
+          "general": 13,
+          "project": 68,
+          "trivial": 5
+        },
+        "trivial": {
+          "general": 6,
+          "project": 2,
+          "trivial": 75
+        }
+      },
+      "latency_ms_p50": 0.17824199949245667,
+      "latency_ms_p95": 0.3862089999529416,
+      "errors": [
+        {
+          "text": "implementa la API en Brisa",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en el endpoint de pagos corrígelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "venga, dale",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "hay un bug en el exportador CSV corrigelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "una cosa: que tal de nuevo",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en el endpoint de pagos, corrigelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "a ver, traduce al ingles: nos vemos manana",
+          "context": [],
+          "gold": "general",
+          "predicted": "trivial"
+        },
+        {
+          "text": "migra la api a la nueva api",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "una cosa: hey",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "una cosa: migra el login a la nueva API",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "una cos:a jajaja",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "cómo va Lumen",
+          "context": [],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: qué tal de nuevo",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "a ver, ¿cómo va Orbita?",
+          "context": [],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: jajaja",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en el login, corrígelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en el exprotador csv corrígelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "migra el endpoint de pagos a la nueva API",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "implementa la api en tundra",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "porfa hola",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "project"
+        }
+      ]
+    },
+    "candidates": [
+      {
+        "name": "hashed",
+        "version": "v2",
+        "train_seconds": 1.1015084470000147,
+        "report": {
+          "n": 265,
+          "accuracy": 0.9245283018867925,
+          "macro_f1": 0.9226074269021879,
+          "per_class": {
+            "general": {
+              "precision": 0.9587628865979382,
+              "recall": 0.96875,
+              "f1": 0.9637305699481865,
+              "support": 96.0
+            },
+            "project": {
+              "precision": 0.8876404494382022,
+              "recall": 0.9186046511627907,
+              "f1": 0.9028571428571427,
+              "support": 86.0
+            },
+            "trivial": {
+              "precision": 0.9240506329113924,
+              "recall": 0.8795180722891566,
+              "f1": 0.9012345679012346,
+              "support": 83.0
+            }
+          },
+          "confusion": {
+            "general": {
+              "general": 93,
+              "project": 0,
+              "trivial": 3
+            },
+            "project": {
+              "general": 4,
+              "project": 79,
+              "trivial": 3
+            },
+            "trivial": {
+              "general": 0,
+              "project": 10,
+              "trivial": 73
+            }
+          },
+          "latency_ms_p50": 0.15996000001905486,
+          "latency_ms_p95": 0.26259200003551086,
+          "errors": [
+            {
+              "text": "eh de acuerod",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "de acuedro",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "venga, dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "oye de aucerdo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "¿y el sáabdo?",
+              "context": [
+                "recent_general"
+              ],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "oye de acuerdo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "a ver, traduce al ingles: nos vemos manana",
+              "context": [],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "porfa dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "hay un bug en el login, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "oye de aceurdo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "hay un bug en el parser, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "oye de acuerod",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "de acuerod",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "eh de acuerdo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "una coas: ¿y el sabado?",
+              "context": [
+                "recent_general"
+              ],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "de acuerdo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "de acuredo",
+              "context": [],
+              "gold": "trivial",
+              "predicted": "project"
+            },
+            {
+              "text": "porfa hay un bug en el login corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "hay un bug en la API, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            }
+          ]
+        },
+        "promoted": false,
+        "reasons": [
+          "recall of 'general' drops 0.021 (> 0.02)",
+          "recall of 'trivial' drops 0.024 (> 0.02)"
+        ]
+      },
+      {
+        "name": "lora-qlora-minilm",
+        "version": "v3",
+        "train_seconds": 30.518628812000316,
+        "report": {
+          "n": 265,
+          "accuracy": 0.8339622641509434,
+          "macro_f1": 0.8348469049772987,
+          "per_class": {
+            "general": {
+              "precision": 0.8202247191011236,
+              "recall": 0.7604166666666666,
+              "f1": 0.7891891891891892,
+              "support": 96.0
+            },
+            "project": {
+              "precision": 0.7558139534883721,
+              "recall": 0.7558139534883721,
+              "f1": 0.755813953488372,
+              "support": 86.0
+            },
+            "trivial": {
+              "precision": 0.9222222222222223,
+              "recall": 1.0,
+              "f1": 0.9595375722543353,
+              "support": 83.0
+            }
+          },
+          "confusion": {
+            "general": {
+              "general": 73,
+              "project": 21,
+              "trivial": 2
+            },
+            "project": {
+              "general": 16,
+              "project": 65,
+              "trivial": 5
+            },
+            "trivial": {
+              "general": 0,
+              "project": 0,
+              "trivial": 83
+            }
+          },
+          "latency_ms_p50": 20.807593999961682,
+          "latency_ms_p95": 30.106996799986515,
+          "errors": [
+            {
+              "text": "expílcame la fotosíntesis en dos frases",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "venga, traduce al inglés: nos vemos esta tarde",
+              "context": [],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "¿como va Brisa?",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "eh cuándo es la entrega de la práctica de bases de datos",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "venga, dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "recuerdame repasar sistemas operativos manana",
+              "context": [
+                "active_project"
+              ],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "pon musica relajada en Spotify",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "¿cuando es la entrega de la practica de bases de datos?",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "¿cómo va atlas?",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "recuerdame repasar bases de datos pasado manana",
+              "context": [
+                "active_project"
+              ],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "oye hay un bug en el modo oscuro corrigelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "¿cómo va Nimbus?",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "hay un bug en la caché, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "¿cuando es la entrega de la practica de estadistica?",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "cómo va Lumen",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "cómo va Nimbus",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "porfa pon música relajada en Spotify",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "porfa dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "pon musica relajada en Discrod",
+              "context": [],
+              "gold": "general",
+              "predicted": "project"
+            },
+            {
+              "text": "hay un bug en el login, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            }
+          ]
+        },
+        "promoted": false,
+        "reasons": [
+          "macro-F1 0.8348 does not beat 0.8971 by more than 0.0",
+          "recall of 'general' drops 0.229 (> 0.02)",
+          "recall of 'project' drops 0.035 (> 0.02)"
+        ]
+      }
+    ],
+    "champion_after": "v1",
+    "seconds": 40.76137694800036
+  },
+  "r3": {
+    "round": "r3-more-data",
+    "seed": 3,
+    "data_commits": {
+      "train": "ab2da3158de474273dd4536a6e1bf2c5763c77dc",
+      "eval": "1c6b3d66c115a0e4e89d4765235e5cc3eea4ceb5"
+    },
+    "sizes": {
+      "train": 1703,
+      "eval": 807,
+      "validation": 369
+    },
+    "champion_before": "v1",
+    "champion_before_report": {
+      "n": 807,
+      "accuracy": 0.7645600991325898,
+      "macro_f1": 0.7645412730360781,
+      "per_class": {
+        "general": {
+          "precision": 0.7328519855595668,
+          "recall": 0.8185483870967742,
+          "f1": 0.7733333333333334,
+          "support": 248.0
+        },
+        "project": {
+          "precision": 0.8968253968253969,
+          "recall": 0.6627565982404692,
+          "f1": 0.7622259696458684,
+          "support": 341.0
+        },
+        "trivial": {
+          "precision": 0.6762589928057554,
+          "recall": 0.8623853211009175,
+          "f1": 0.7580645161290324,
+          "support": 218.0
+        }
+      },
+      "confusion": {
+        "general": {
+          "general": 203,
+          "project": 12,
+          "trivial": 33
+        },
+        "project": {
+          "general": 58,
+          "project": 226,
+          "trivial": 57
+        },
+        "trivial": {
+          "general": 16,
+          "project": 14,
+          "trivial": 188
+        }
+      },
+      "latency_ms_p50": 0.15842799984966405,
+      "latency_ms_p95": 0.2882107999539585,
+      "errors": [
+        {
+          "text": "a ver, dale",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "aandele la api",
+          "context": [
+            "named_project"
+          ],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en la API, corrigelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "una cosa: hay un bug en la búsqueda, corrígelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "hay un bug en el endpoint de pagos, corríeglo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "conitnua",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "¿cómo va Kestrel?",
+          "context": [],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "a ver, mándaselo a luis",
+          "context": [
+            "recent_general"
+          ],
+          "gold": "general",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: hay un bug en la API corrígelo",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "eh andaele la api",
+          "context": [
+            "named_project"
+          ],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "mandaeslo a Ana",
+          "context": [
+            "recent_general"
+          ],
+          "gold": "general",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: dale",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "venga, abre Spotify",
+          "context": [],
+          "gold": "general",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: jajaaj",
+          "context": [],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "anadele la API",
+          "context": [
+            "named_project"
+          ],
+          "gold": "project",
+          "predicted": "general"
+        },
+        {
+          "text": "que tal",
+          "context": [
+            "active_project"
+          ],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "a ver, continua",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "oye continua",
+          "context": [
+            "active_project"
+          ],
+          "gold": "project",
+          "predicted": "trivial"
+        },
+        {
+          "text": "una cosa: hey",
+          "context": [
+            "active_project"
+          ],
+          "gold": "trivial",
+          "predicted": "general"
+        },
+        {
+          "text": "implmeenta el exportador csv en vega",
+          "context": [],
+          "gold": "project",
+          "predicted": "general"
+        }
+      ]
+    },
+    "candidates": [
+      {
+        "name": "hashed",
+        "version": "v4",
+        "train_seconds": 4.153249493999283,
+        "report": {
+          "n": 807,
+          "accuracy": 0.8116480793060719,
+          "macro_f1": 0.811223162252429,
+          "per_class": {
+            "general": {
+              "precision": 0.7875816993464052,
+              "recall": 0.9717741935483871,
+              "f1": 0.8700361010830324,
+              "support": 248.0
+            },
+            "project": {
+              "precision": 1.0,
+              "recall": 0.5747800586510264,
+              "f1": 0.7299813780260709,
+              "support": 341.0
+            },
+            "trivial": {
+              "precision": 0.7147540983606557,
+              "recall": 1.0,
+              "f1": 0.8336520076481836,
+              "support": 218.0
+            }
+          },
+          "confusion": {
+            "general": {
+              "general": 241,
+              "project": 0,
+              "trivial": 7
+            },
+            "project": {
+              "general": 65,
+              "project": 196,
+              "trivial": 80
+            },
+            "trivial": {
+              "general": 0,
+              "project": 0,
+              "trivial": 218
+            }
+          },
+          "latency_ms_p50": 0.1398269996570889,
+          "latency_ms_p95": 0.2308675000676885,
+          "errors": [
+            {
+              "text": "a ver, dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "¿cómo va Atlas?",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "hay un bug en la API, corrigelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "hay un bug en la busqueda, corrigelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "porfa ¿como va Nimbus?",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "hay un bug en las notificaciones corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "una cosa: hay un bug en la búsqueda, corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "conitnua",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "a ver, mándaselo a luis",
+              "context": [
+                "recent_general"
+              ],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "una cosa: hay un bug en la API corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "una cosa: dale",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "hay un bug en la búsqueda corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "cómo va atlas",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "a ver, continua",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "oye continua",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "una cosa: ¿cuanto ocupa la carpeta de descargas?",
+              "context": [],
+              "gold": "general",
+              "predicted": "trivial"
+            },
+            {
+              "text": "a ver, hay un bug en la búsqueda, corírgelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "hay un bug en la caché corrígelo",
+              "context": [],
+              "gold": "project",
+              "predicted": "general"
+            },
+            {
+              "text": "continau",
+              "context": [
+                "active_project"
+              ],
+              "gold": "project",
+              "predicted": "trivial"
+            },
+            {
+              "text": "¿como va lmuen?",
+              "context": [],
+              "gold": "project",
+              "predicted": "trivial"
+            }
+          ]
+        },
+        "promoted": false,
+        "reasons": [
+          "recall of 'project' drops 0.088 (> 0.02)"
+        ]
+      }
+    ],
+    "champion_after": "v1",
+    "seconds": 75.87967051499982
+  }
+}

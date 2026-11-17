@@ -1,0 +1,13 @@
+{
+  "version": "v4",
+  "registered_at": 1794926492.04598,
+  "round": "r3-more-data",
+  "candidate": "hashed",
+  "data": {
+    "train": "ab2da3158de474273dd4536a6e1bf2c5763c77dc",
+    "eval": "1c6b3d66c115a0e4e89d4765235e5cc3eea4ceb5"
+  },
+  "options": {
+    "epochs": 100
+  }
+}

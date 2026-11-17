@@ -1,0 +1,16 @@
+{
+  "version": "v3",
+  "registered_at": 1794926410.2849238,
+  "round": "r2-improve",
+  "candidate": "lora-qlora-minilm",
+  "data": {
+    "train": "0c47272333b36d22e8f8b22f198a6714c71619ab",
+    "eval": "bbc32a358906da77814bb122237c045bb6cf253f"
+  },
+  "options": {
+    "epochs": 10,
+    "lr": 0.002,
+    "batch_size": 16,
+    "patience": 2
+  }
+}

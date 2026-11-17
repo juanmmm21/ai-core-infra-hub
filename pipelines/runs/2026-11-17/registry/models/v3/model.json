@@ -1,0 +1,46 @@
+{
+  "kind": "lora-classifier",
+  "labels": [
+    "project",
+    "general",
+    "trivial"
+  ],
+  "base_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "lora": {
+    "r": 8,
+    "alpha": 16.0,
+    "target_modules": [
+      "query",
+      "value"
+    ],
+    "dropout": 0.05
+  },
+  "quantize_4bit": true,
+  "max_length": 48,
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.4974795936145515,
+      "seconds": 6.322357318000286,
+      "val_accuracy": 0.94
+    },
+    {
+      "epoch": 2,
+      "loss": 0.06628662030621667,
+      "seconds": 6.116768632000458,
+      "val_accuracy": 0.97
+    },
+    {
+      "epoch": 3,
+      "loss": 0.013146273938669153,
+      "seconds": 6.0751414729993485,
+      "val_accuracy": 0.96
+    },
+    {
+      "epoch": 4,
+      "loss": 0.020453988599033905,
+      "seconds": 6.024529953999263,
+      "val_accuracy": 0.85
+    }
+  ]
+}

@@ -17,7 +17,12 @@ SPEC = Path(__file__).resolve().parents[1] / "pipelines" / "specs" / "assistant_
 def test_two_rounds_promote_only_a_winner(tmp_path: Path) -> None:
     loop = RouterImprovementLoop(str(SPEC), str(tmp_path))
     # Round 1: a deliberately weak model (few examples, few steps) becomes champion by default.
-    r1 = loop.run("r1", n_per_label=20, seed=1, candidates={"weak": {"kind": "hashed", "fit": {"epochs": 1}}})
+    r1 = loop.run(
+        "r1",
+        n_per_label=20,
+        seed=1,
+        candidates={"weak": {"kind": "hashed", "fit": {"epochs": 1}, "early_stopping": False}},
+    )
     assert r1.champion_before is None and r1.candidates[0].promoted and r1.champion_after == "v1"
     # Round 2: a proper challenger beats it on the same held-out templates; a copy of the weak
     # recipe does not.
@@ -25,8 +30,11 @@ def test_two_rounds_promote_only_a_winner(tmp_path: Path) -> None:
         "r2",
         n_per_label=150,
         seed=2,
-        candidates={"strong": {"kind": "hashed"}, "weak-again": {"kind": "hashed", "fit": {"epochs": 1}}},
-        max_class_drop=0.1,
+        candidates={
+            "strong": {"kind": "hashed"},
+            "weak-again": {"kind": "hashed", "fit": {"epochs": 1}, "early_stopping": False},
+        },
+        max_class_drop=1.0,  # the class-regression rule has its own tests in the router
     )
     strong, weak = r2.candidates
     assert strong.promoted, strong.reasons
