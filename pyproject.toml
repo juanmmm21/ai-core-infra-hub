@@ -40,7 +40,7 @@ agents = [
 ops = [
     "httpx>=0.24",
     "llm-inference-server @ git+https://github.com/juanmmm21/llm-inference-server.git@feat/ai-core-roadmap",
-    "llm-observability-tracer @ git+https://github.com/juanmmm21/llm-observability-tracer.git@feat/ai-core-roadmap",
+    "llm-observability-tracer[otel] @ git+https://github.com/juanmmm21/llm-observability-tracer.git@feat/ai-core-roadmap",
     "llm-eval-harness @ git+https://github.com/juanmmm21/llm-eval-harness.git@feat/ai-core-roadmap",
     "synthetic-data-generator @ git+https://github.com/juanmmm21/synthetic-data-generator.git@feat/ai-core-roadmap",
     "dataset-version-control @ git+https://github.com/juanmmm21/dataset-version-control.git@feat/ai-core-roadmap",
@@ -48,7 +48,7 @@ ops = [
 ]
 # PyTorch-heavy pieces, kept apart so `rag`, `agents` and `ops` stay light.
 train = [
-    "llm-qlora-finetuner @ git+https://github.com/juanmmm21/llm-qlora-finetuner.git@feat/ai-core-roadmap",
+    "llm-qlora-finetuner[hf] @ git+https://github.com/juanmmm21/llm-qlora-finetuner.git@feat/ai-core-roadmap",
     "contrastive-embedding-trainer @ git+https://github.com/juanmmm21/contrastive-embedding-trainer.git@v0.1.0",
 ]
 all = ["aicore[rag,agents,ops,train]"]
