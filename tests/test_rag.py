@@ -71,7 +71,8 @@ def test_hybrid_retriever_fuses_bm25_and_dense() -> None:
     hits = retriever.search("highest mountain Himalayas", k=2)
     assert hits[0].id == "everest"
     assert {"fused", "bm25"} <= set(hits[0].signals)
-    assert retriever.sparse_search("sourdough", k=1)[0].id == "bread"
+    sparse = retriever.sparse_search("sourdough", k=1)[0]
+    assert sparse.id == "bread" and sparse.metadata["document_id"] == "bread"
     assert retriever.dense_search("Eiffel Tower Paris", k=1)[0].id == "paris"
 
 
