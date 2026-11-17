@@ -15,14 +15,19 @@ from typing import Any
 from .._deps import component
 from ..errors import InferenceError, MissingExtraError
 from ..types import Generation
+from .rag_eval import BenchmarkResult, RAGBenchmark, load_examples, load_hotpotqa
 
 __all__ = [
+    "BenchmarkResult",
     "DatasetRepo",
     "Evaluator",
     "InferenceClient",
+    "RAGBenchmark",
     "SyntheticData",
     "Tracer",
     "annotation_app",
+    "load_examples",
+    "load_hotpotqa",
 ]
 
 AREA = "ops"

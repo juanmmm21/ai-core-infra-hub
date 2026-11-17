@@ -49,8 +49,19 @@ PUBLIC = {
         "Reranker",
         "VectorIndex",
     ],
-    "aicore.agents": ["Guard", "Memory", "Orchestrator", "Router", "ToolRuntime"],
-    "aicore.ops": ["DatasetRepo", "Evaluator", "InferenceClient", "SyntheticData", "Tracer", "annotation_app"],
+    "aicore.agents": ["Guard", "IntentRouter", "Memory", "Orchestrator", "Router", "ToolRuntime"],
+    "aicore.ops": [
+        "BenchmarkResult",
+        "DatasetRepo",
+        "Evaluator",
+        "InferenceClient",
+        "RAGBenchmark",
+        "SyntheticData",
+        "Tracer",
+        "annotation_app",
+        "load_examples",
+        "load_hotpotqa",
+    ],
     "aicore.train": ["LoraFinetuner"],
 }
 
