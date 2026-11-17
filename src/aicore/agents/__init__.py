@@ -189,14 +189,29 @@ class IntentRouter:
 
 class Guard:
     """llm-guardrails-shield: prompt-injection and toxicity on the way in (PII redacted),
-    secret leaks and unsupported claims on the way out."""
+    secret leaks and unsupported claims on the way out.
 
-    def __init__(self, toxic_keywords: Sequence[str] | None = None, shield: Any = None) -> None:
+    ``injection_detector`` is ``"rules"`` (no false positives measured on real questions),
+    ``"classifier"`` or ``"hybrid"`` (more recall); ``block_destructive=False`` lets requests such
+    as "drop the temp table" through, as an assistant for developers needs.
+    """
+
+    def __init__(
+        self,
+        toxic_keywords: Sequence[str] | None = None,
+        shield: Any = None,
+        injection_detector: str = "hybrid",
+        block_destructive: bool = True,
+    ) -> None:
         mod = component(AREA, "llm_guardrails_shield")
         self._shield = (
             shield
             if shield is not None
-            else mod.LLMGuardrailsShield(toxic_keywords=list(toxic_keywords) if toxic_keywords else None)
+            else mod.LLMGuardrailsShield(
+                toxic_keywords=list(toxic_keywords) if toxic_keywords else None,
+                injection_detector=injection_detector,
+                block_destructive=block_destructive,
+            )
         )
 
     def check_input(self, text: str) -> GuardVerdict:
