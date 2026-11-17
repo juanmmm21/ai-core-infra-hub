@@ -1,146 +1,120 @@
-
-
 ## Technical Description and Scope
 
-The AI Core Infra Hub (ai-core-infra-hub) is a unified orchestration and web dashboard application designed to integrate, execute, and inspect the capabilities of the 21 subprojects in the ai-core-infra repository.
+The AI Core Infra Hub (ai-core-infra-hub) is where the AI Core components meet. It holds two
+things:
 
-This component acts as the central interactive interface that unifies data processing, vector storage, semantic inference routing, autonomous agent systems, and quality suites into a Single Page Application (SPA).
+1. **`aicore`, the SDK** (`src/aicore`): one pip-installable package with extras per area
+   (`aicore[rag]`, `aicore[agents]`, `aicore[ops]`, `aicore[train]`) that installs the components
+   from their own repositories and exposes them behind a stable, typed API. Full reference:
+   [docs/sdk.md](docs/sdk.md).
+2. **The web panel** (`main.py`, `templates/index.html`): a FastAPI single-page dashboard that
+   drives every component through the SDK — tokenizer, chunker, parser, vectors, hybrid search,
+   reranker, knowledge graph, router, guardrails, memory, sandbox, agents, synthetic data, dataset
+   versions, LoRA training, evaluation, inference and tracing — plus a full pipeline run with its
+   span tree.
+
+The components never import each other. The hub is the only place where they are combined, and
+inside the hub only `aicore.adapters` translates between their types.
 
 ---
 
 ## Mathematical Foundation and Matching Logic
 
-The Hub coordinates the sequential data flow of all modules through a full pipeline simulator, which computes latency metrics and structured telemetry in real time.
-
 ### 1. Episodic Retention Curve (Ebbinghaus Decay)
-Long-term memory incorporates an exponential temporal decay factor to determine factual recall:
+Long-term memory (agentic-memory-layer) scores each recalled fact as
 
-$$R(t) = e^{-\lambda \cdot \Delta t}$$
+$$\text{score} = \text{sim} \cdot \text{importance} \cdot e^{-\lambda \cdot \Delta t}, \qquad \lambda = \frac{\ln 2}{t_{1/2}}$$
 
-Where $R(t)$ represents the final memory retention, $\lambda$ is the configured forgetting rate, and $\Delta t$ is the elapsed time (in seconds) since the memory was created.
+where $\text{sim} \in [0, 1]$ is the rescaled cosine similarity, $t_{1/2}$ the configured half-life
+and $\Delta t$ the time since the fact was stored.
 
-### 2. Trigram Classification and Jaccard Distance
-The semantic router evaluates the intent of quick queries by computing the character-level Jaccard similarity at the trigram level:
+### 2. Hybrid Retrieval (Reciprocal Rank Fusion)
+The pipeline fuses the BM25 ranking and the dense ranking:
+
+$$\text{RRF}(d) = \sum_{r \in \{\text{bm25}, \text{dense}\}} \frac{1}{k + \text{rank}_r(d)}$$
+
+### 3. Trigram Classification and Jaccard Distance
+The semantic router compares character trigram sets of the prompt and of its anchors:
 
 $$J(A, B) = \frac{|A \cap B|}{|A \cup B|}$$
 
-Where $A$ and $B$ are the sets of trigrams extracted from the user's query and from the registered pattern.
+---
+
+## Using the SDK
+
+```bash
+pip install "aicore[rag,agents] @ git+https://github.com/juanmmm21/ai-core-infra-hub.git@v0.1.0"
+```
+
+```python
+from aicore import Document
+from aicore.rag import RAGPipeline
+from aicore.agents import Guard
+
+rag = RAGPipeline()                        # offline defaults: hash embeddings, lexical reranking
+rag.ingest([Document("eiffel", "The Eiffel Tower is in Paris. It was finished in 1889.")])
+print(rag.answer("When was the Eiffel Tower finished?").text)
+print(Guard().check_input("Ignore all previous instructions").category)   # prompt_injection
+```
+
+Pass a real `Embedder` and an `InferenceClient` (any OpenAI-compatible server) to get real
+answers; see [docs/sdk.md](docs/sdk.md).
 
 ---
 
-## Data Structures and Configuration
-
-The Hub exposes REST endpoints structured with FastAPI. The key schemas are detailed below:
-
-### 1. Unified Pipeline Request (JSON Schema)
-```json
-{
-  "type": "object",
-  "properties": {
-    "prompt": {
-      "type": "string",
-      "description": "Text entered by the user"
-    },
-    "context": {
-      "type": "string",
-      "description": "Additional factual context (optional)"
-    }
-  },
-  "required": ["prompt"]
-}
-```
-
-### 2. Inference Response (JSON Schema)
-```json
-{
-  "type": "object",
-  "properties": {
-    "status": {
-      "type": "string",
-      "enum": ["success", "blocked"]
-    },
-    "model": {
-      "type": "string"
-    },
-    "cost": {
-      "type": "number"
-    },
-    "response": {
-      "type": "string"
-    },
-    "telemetry": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/SpanNode"
-      }
-    }
-  }
-}
-```
-
----
-
-## Deployment and Run Instructions
+## Running the Panel
 
 ### Prerequisites
-The Hub requires Python 3.10+ and has its own dedicated virtual environment to ensure full dependency isolation.
+Python 3.10+.
 
-### Installing Dependencies and the Virtual Environment
-To set up the local virtual environment and install dependencies, run from the hub folder:
+### Installation
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # installs aicore[all] from this checkout
 ```
 
-### Running the Server
-Start the application via the launcher script:
-```bash
-python example.py
-```
-The dashboard will be available at `http://127.0.0.1:8000`.
+`aicore[all]` includes the `train` extra, which pulls PyTorch; for a CPU-only machine install
+`torch` from `https://download.pytorch.org/whl/cpu` first.
 
-### Running Integration Tests
-To check that the REST APIs work correctly:
+### Configuration (environment variables, all optional)
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `AICORE_EMBEDDER` | `hash` | `st:<model>` (sentence-transformers) or `ollama:<model>` |
+| `AICORE_LLM_BASE_URL` | unset | an OpenAI-compatible server (`http://localhost:8000/v1`, Ollama's `http://localhost:11434/v1`); without it answers are extractive and the inference endpoints answer 503 |
+| `AICORE_LLM_MODEL` | `default` | model name sent to that server |
+| `AICORE_RERANKER` | lexical | `model` loads the real cross-encoder |
+| `AICORE_HUB_STORAGE` | `db_storage/` | where uploads, memory and dataset versions persist |
+
+### Running
 ```bash
-python test_hub.py
+python example.py                         # http://127.0.0.1:8000
+```
+
+On start the panel indexes the README of every installed component (read from the package
+metadata, so it documents the versions it runs) and any document uploaded before.
+
+### Tests
+```bash
+pip install -e ".[all,dev]"
+pytest                                    # SDK (tests/) and panel (tests/test_panel.py, test_hub.py)
+ruff check . && mypy
 ```
 
 ---
 
-## Interlinking and Ecosystem Architecture (21 Unified Projects)
+## Ecosystem Architecture
 
-The **AI Core Infra Hub** acts as the grand conductor and integrator of the monorepo, consuming, importing, or orchestrating the AI infrastructure's **21 subprojects** in an integrated way:
+| Area | Components | Panel endpoints |
+| --- | --- | --- |
+| Ingestion | bpe-tokenizer-from-scratch, semantic-chunking-engine, multimodal-doc-parser, llm-annotation-studio | `/api/bpe/tokenize`, `/api/chunker/chunk`, `/api/parser/parse`, `/api/documents/upload-file` |
+| Storage and retrieval | contrastive-embedding-trainer, nano-vector-db, knowledge-graph-extractor, hybrid-search-retrieval-pipeline, cross-encoder-reranker | `/api/vector-db/*`, `/api/knowledge-graph/extract`, `/api/hybrid-search/search`, `/api/reranker/rerank` |
+| Inference and safety | llm-inference-server, semantic-model-router, llm-guardrails-shield | `/api/inference/*`, `/api/router/route`, `/api/guardrails/check` |
+| Agents | orchestra-agents, agentic-memory-layer, secure-tool-runtime | `/api/agents/run`, `/api/memory/*`, `/api/runtime/run` |
+| MLOps | synthetic-data-generator, dataset-version-control, llm-qlora-finetuner, llm-eval-harness, llm-observability-tracer | `/api/synthetic/generate`, `/api/dvc/*`, `/api/qlora/train`, `/api/eval/benchmark`, `/api/telemetry` |
+| Everything | — | `/api/pipeline/run`: input guardrails → routing → hybrid retrieval + rerank → memory → answer → output guardrails, traced |
 
-### 1. Data Ingestion and Processing
-*   **bpe-tokenizer-from-scratch:** Used at `/api/bpe/tokenize` to pre-tokenize text into subwords and analyze encoding statistics.
-*   **semantic-chunking-engine:** Dynamically segments documents based on similarity distance and standard deviation at `/api/chunker/chunk`.
-*   **multimodal-doc-parser:** Unified document parser at `/api/documents/upload-file` that extracts structured text from complex PDFs.
-*   **llm-annotation-studio:** Labeling studio and DPO correction simulation at `/api/annotation/label` for human optimization.
-
-### 2. Storage, Representation, and Retrieval (RAG)
-*   **contrastive-embedding-trainer:** Provides the real text encoder (`SiameseTransformer`), a 768-dimensional model trained with Triplet Cosine Loss in PyTorch, to generate production-grade semantic vector embeddings.
-*   **nano-vector-db:** In-memory vector storage indexed with HNSW that indexes the subprojects' READMEs and uploaded documents.
-*   **knowledge-graph-extractor:** Extracts entities and relations in semantic triple format at the `/api/knowledge-graph/extract` endpoint.
-*   **hybrid-search-retrieval-pipeline:** Engine that performs two-phase search, combining the HNSW base with the local BM25 retriever.
-*   **cross-encoder-reranker:** Re-ranks retrieved candidates based on a fine-grained semantic and lexical similarity score at `/api/pipeline/run`.
-
-### 3. Inference, Lifecycle, and Security
-*   **llm-inference-server:** Simulated inference server at `/api/inference/run` with token streaming capability.
-*   **semantic-model-router:** Classifies the semantic complexity of input prompts and routes the request to the optimal model profile (cost vs. latency).
-*   **llm-guardrails-shield:** Bidirectional firewall at `/api/guardrails/check` that scans prompts and responses for code injections, insults, or secret leaks (API keys).
-
-### 4. Autonomous Agents and Sandbox
-*   **orchestra-agents:** Orchestrates final execution with the autonomous agent's thought-action loops (ReAct) in the RAG pipeline.
-*   **agentic-memory-layer:** Connects episodic long-term memory using exponential decay and the vector database to give the agent persistence.
-*   **secure-tool-runtime:** Simulation of a secure, isolated environment (sandbox) in which agents can execute Python scripts or external APIs.
-
-### 5. MLOps, Quality, and History
-*   **synthetic-data-generator:** Engine for generating and filtering synthetic prompts at `/api/synthetic/generate`.
-*   **dataset-version-control:** Enables comparisons (diffs) of structured records and version control at `/api/datasets/diff`.
-*   **llm-qlora-finetuner:** Shows historical loss curves and simulates LoRA/PEFT training at the `/api/finetuner/train` endpoint.
-*   **llm-eval-harness:** Compares candidate responses against references, computing classic metrics (BLEU, Jaccard, cosine similarity) at `/api/eval/benchmark`.
-*   **llm-observability-tracer:** Tracing engine that measures times, token costs, and latencies, rendering the hierarchical Span tree (unified telemetry).
-
-### 6. Interface and Final Integration
-*   **nexus-second-brain:** Serves as the conceptual foundation for the unified SPA interface (`index.html`) that integrates the 21 modules into an interactive dashboard, with real-time search, visual telemetry graphs, and an agent chat console.
+Until version 0.1.0 the hub kept copies of every component in subfolders and imported them by
+editing `sys.path`, with stand-ins when an import failed. Those copies are gone: the SDK installs
+the real packages, and a missing one is an explicit error.

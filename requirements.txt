@@ -1,8 +1,7 @@
+# The panel runs on the aicore SDK of this same repository, which installs every component
+# from its own repository (see pyproject.toml).
+-e .[all]
 fastapi>=0.100.0
 uvicorn>=0.22.0
-sse-starlette>=1.6.0
-numpy>=1.20.0
-pydantic>=2.0
-httpx>=0.24.0
-pymupdf>=1.22.0
 python-multipart>=0.0.6
+httpx>=0.24.0

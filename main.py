@@ -1,1670 +1,753 @@
-import os
-import sys
-import time
-import math
-import uuid
+"""AI Core Infra Hub: the web panel over the ai-core components, built on the ``aicore`` SDK.
+
+The panel no longer imports component modules or keeps copies of them: every call goes through
+``aicore`` (``pip install -e ".[all]"``), which installs the components from their own
+repositories. Configuration, all optional, by environment variable:
+
+* ``AICORE_EMBEDDER``: ``hash`` (default, offline), ``st:<sentence-transformers model>`` or
+  ``ollama:<model>``.
+* ``AICORE_LLM_BASE_URL`` / ``AICORE_LLM_MODEL`` / ``AICORE_LLM_API_KEY``: any OpenAI-compatible
+  server (llm-inference-server, Ollama's ``/v1``, llama.cpp). Without it, answers are extractive.
+* ``AICORE_RERANKER=model`` loads the real cross-encoder (needs the component's ``[model]`` extra).
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
-import numpy as np
-from typing import Dict, List, Any, Tuple, Optional, Union
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-import asyncio
-import pickle
-
-# Setup path mapping to nested and sibling projects (Interlinking)
-HUB_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(HUB_DIR)
-
-PROJECT_PATHS = [
-    "bpe-tokenizer-from-scratch",
-    "semantic-chunking-engine",
-    "multimodal-doc-parser",
-    "llm-annotation-studio",
-    "contrastive-embedding-trainer",
-    "nano-vector-db",
-    "knowledge-graph-extractor",
-    "hybrid-search-retrieval-pipeline",
-    "cross-encoder-reranker",
-    "llm-inference-server",
-    "semantic-model-router",
-    "llm-guardrails-shield",
-    "orchestra-agents",
-    "agentic-memory-layer",
-    "secure-tool-runtime",
-    "synthetic-data-generator",
-    "dataset-version-control",
-    "llm-qlora-finetuner",
-    "llm-eval-harness",
-    "llm-observability-tracer",
-    "nexus-second-brain"
-]
-
-for p in PROJECT_PATHS:
-    nested_path = os.path.join(HUB_DIR, p)
-    if os.path.isdir(nested_path):
-        if nested_path not in sys.path:
-            sys.path.append(nested_path)
-    else:
-        sibling_path = os.path.join(PARENT_DIR, p)
-        if sibling_path not in sys.path:
-            sys.path.append(sibling_path)
-
-
-# Safe imports with placeholders and simulated fallbacks if necessary
-import hashlib
-import random
+import math
+import os
 import re
+import tempfile
+import threading
+import time
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
+from importlib import metadata
+from pathlib import Path
+from typing import Any
 
-try:
-    from tokenizer import BPETokenizer
-except ImportError:
-    class BPETokenizer:
-        def __init__(self):
-            pass
-        def train(self, text: str, vocab_size: int, verbose: bool = False) -> None:
-            pass
-        def encode(self, text: str) -> List[int]:
-            return [ord(c) for c in text]
-        def decode(self, tokens: List[int]) -> str:
-            return "".join(chr(t) for t in tokens)
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-try:
-    from chunker import SemanticChunker
-    from embedding_provider import MockEmbeddingProvider
-except ImportError:
-    class MockEmbeddingProvider:
-        def __init__(self, dimension: int = 768) -> None:
-            self.dimension = dimension
-            
-        def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-            trainer_dir = "/Users/golfeno/Desarrollo/ai-core-infra/contrastive-embedding-trainer"
-            trainer_python = os.path.join(trainer_dir, ".venv", "bin", "python3")
-            checkpoint_path = os.path.join(trainer_dir, "model_output", "siamese_state.pt")
-            
-            if os.path.exists(checkpoint_path) and os.path.exists(trainer_python):
-                try:
-                    import subprocess
-                    import json
-                    cmd = [
-                        trainer_python,
-                        "-c",
-                        f"""
-import sys, torch, json
-sys.path.append("{trainer_dir}")
-from model import SiameseTransformer
-from transformers import AutoTokenizer
+from aicore import Chunk, Document, Embedder, HashEmbedder, OllamaEmbedder, SentenceTransformerEmbedder, cosine
+from aicore.agents import Guard, Memory, Orchestrator, Router, ToolRuntime
+from aicore.ops import DatasetRepo, Evaluator, InferenceClient, SyntheticData, Tracer
+from aicore.rag import (
+    BPETokenizer,
+    Chunker,
+    DocumentParser,
+    GraphExtractor,
+    HybridRetriever,
+    RAGPipeline,
+    Reranker,
+    VectorIndex,
+)
 
-tokenizer = AutoTokenizer.from_pretrained("{trainer_dir}/model_output")
-model = SiameseTransformer("distilbert-base-uncased")
-model.load_state_dict(torch.load("{trainer_dir}/model_output/siamese_state.pt", map_location="cpu"))
-model.eval()
-
-texts = json.loads(sys.argv[1])
-embeddings = []
-with torch.no_grad():
-    for text in texts:
-        encoded = tokenizer(text, max_length=64, padding="max_length", truncation=True, return_tensors="pt")
-        embedding = model(encoded["input_ids"], encoded["attention_mask"]).squeeze(0).tolist()
-        embeddings.append(embedding)
-print(json.dumps(embeddings))
-                        """,
-                        json.dumps(texts)
-                    ]
-                    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                    embs = json.loads(res.stdout.strip())
-                    if len(embs) == len(texts) and len(embs[0]) == self.dimension:
-                        return embs
-                except Exception as e:
-                    logging.getLogger("ai_core_infra_hub").warning(f"Fallback to deterministic hash embeddings due to: {e}")
-
-            # Fallback to deterministic pseudo-embeddings
-            embeddings = []
-            for text in texts:
-                rng = random.Random(int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16))
-                embeddings.append([rng.normalvariate(0.0, 1.0) for _ in range(self.dimension)])
-            return embeddings
-
-    class SemanticChunker:
-        def __init__(self, embedding_provider, tokenizer=None, window_size=3, threshold_factor=1.2, max_tokens=512):
-            self.embedding_provider = embedding_provider
-        def chunk_text(self, text: str) -> List[Dict[str, Any]]:
-            # Fallback basic chunking by sentences
-            sentences = [s.strip() for s in re.split(r'(?<=\.|\?|!)\s+', text) if s.strip()]
-            return [{"text": s, "sentences": [s], "index": i} for i, s in enumerate(sentences)]
-
-try:
-    from parser import MultimodalDocParser
-    from backend import LocalExtractBackend
-except ImportError:
-    class LocalExtractBackend:
-        pass
-    class MultimodalDocParser:
-        pass
-
-try:
-    from database import NanoVectorDB
-except ImportError:
-    class NanoVectorDB:
-        def __init__(self, dimension: int = 768, index_type: str = "hnsw"):
-            self.dimension = dimension
-            self.index_type = index_type
-            self.data = {}
-        def insert(self, id: str, vector: List[float], metadata: Optional[Dict[str, Any]] = None):
-            self.data[id] = {"vector": vector, "metadata": metadata or {}}
-        def query(self, vector: List[float], top_k: int = 3, filter: Optional[Dict[str, Any]] = None):
-            results = []
-            v1 = np.array(vector)
-            for item_id, item in self.data.items():
-                v2 = np.array(item["vector"])
-                # Cosine distance
-                dot = np.dot(v1, v2)
-                norm1 = np.linalg.norm(v1)
-                norm2 = np.linalg.norm(v2)
-                sim = dot / (norm1 * norm2 + 1e-9)
-                dist = 1.0 - float(sim)
-                results.append({"id": item_id, "distance": dist, "metadata": item["metadata"]})
-            results.sort(key=lambda x: x["distance"])
-            return results[:top_k]
-
-try:
-    from extractor import KnowledgeGraphStore
-except ImportError:
-    class KnowledgeGraphStore:
-        pass
-
-try:
-    from pipeline import HybridSearchPipeline
-    from bm25 import BM25Retriever
-except ImportError:
-    class BM25Retriever:
-        def __init__(self):
-            self.corpus = {}
-        def _normalize(self, t: str) -> str:
-            accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
-            res = t.lower().strip("?,.:;!\"'()[]{}")
-            for a, b in accents.items():
-                res = res.replace(a, b)
-            return res
-        def fit(self, corpus: Dict[str, str]):
-            self.corpus = corpus
-        def _get_stems(self, text: str) -> Set[str]:
-            words = [self._normalize(w) for w in text.split() if w.strip()]
-            stems = set()
-            for w in words:
-                stems.add(w)
-                if len(w) > 4:
-                    stems.add(w[:4])
-            return stems
-        def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[float, str]]:
-            q_stems = self._get_stems(query)
-            results = []
-            for doc_id, text in self.corpus.items():
-                d_stems = self._get_stems(text)
-                score = sum(1.0 for s in q_stems if s in d_stems)
-                
-                # Penalizar paginas de bibliografia, indices o anexos (sin importar acentos)
-                doc_lower = text.lower()
-                accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
-                doc_norm = doc_lower
-                for a, b in accents.items():
-                    doc_norm = doc_norm.replace(a, b)
-                    
-                penalty_keywords = ["bibliografia", "webgrafia", "indice de", "anexo", "referencias"]
-                if any(kw in doc_norm[:120] for kw in penalty_keywords):
-                    score *= 0.1
-                    
-                results.append((score, doc_id))
-            results.sort(reverse=True, key=lambda x: x[0])
-            return results[:top_k]
-    class HybridSearchPipeline:
-        pass
-
-try:
-    from reranker import CrossEncoderReranker
-except ImportError:
-    class CrossEncoderReranker:
-        def __init__(self, model_name: str, device: str = "cpu"):
-            self.is_online = False
-        def _normalize(self, t: str) -> str:
-            accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
-            res = t.lower().strip("?,.:;!\"'()[]{}")
-            for a, b in accents.items():
-                res = res.replace(a, b)
-            return res
-        def _get_stems(self, text: str) -> Set[str]:
-            words = [self._normalize(w) for w in text.split() if w.strip()]
-            stems = set()
-            for w in words:
-                stems.add(w)
-                if len(w) > 4:
-                    stems.add(w[:4])
-            return stems
-        def rerank(self, query: str, documents: List[Dict[str, Any]], top_k: int = 3) -> List[Dict[str, Any]]:
-            q_stems = self._get_stems(query)
-            scored = []
-            for doc in documents:
-                d_stems = self._get_stems(doc["text"])
-                score = sum(0.3 for s in q_stems if s in d_stems) + 0.1
-                
-                # Penalizar paginas de bibliografia, indices o anexos (sin importar acentos)
-                doc_lower = doc["text"].lower()
-                accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
-                doc_norm = doc_lower
-                for a, b in accents.items():
-                    doc_norm = doc_norm.replace(a, b)
-                    
-                penalty_keywords = ["bibliografia", "webgrafia", "indice de", "anexo", "referencias"]
-                if any(kw in doc_norm[:120] for kw in penalty_keywords):
-                    score -= 3.0
-                    
-                doc_copy = doc.copy()
-                doc_copy["rerank_score"] = min(0.99, score)
-                scored.append(doc_copy)
-            scored.sort(key=lambda x: x["rerank_score"], reverse=True)
-            return scored[:top_k]
-
-try:
-    from inference_engine import InferenceEngine
-except ImportError:
-    class InferenceEngine:
-        pass
-
-try:
-    from router import SemanticModelRouter, ModelProfile
-except ImportError:
-    class SemanticModelRouter:
-        def route(self, prompt: str):
-            length = len(prompt.split())
-            if length < 6:
-                class Decision:
-                    selected_model = "gpt-4o-mini"
-                    reason = "Consulta simple y corta (Simulado)"
-                    estimated_cost_per_1k_tokens = 0.00015
-                    complexity_category = "Baja"
-                    routing_path = "Local rule-based heuristic -> gpt-4o-mini"
-                return Decision()
-            else:
-                class Decision:
-                    selected_model = "claude-3-5-sonnet"
-                    reason = "Consulta compleja o requiere codigo (Simulado)"
-                    estimated_cost_per_1k_tokens = 0.0030
-                    complexity_category = "Alta"
-                    routing_path = "Local rule-based heuristic -> claude-3-5-sonnet"
-                return Decision()
-
-try:
-    from shield import LLMGuardrailsShield
-except ImportError:
-    class LLMGuardrailsShield:
-        def validate_input(self, prompt: str) -> Tuple[bool, str, str]:
-            # Redact basic phone numbers
-            clean = prompt
-            phone_pattern = r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,3}\)?[-.\s]?\d{3}[-.\s]?\d{3,4}\b"
-            if re.search(phone_pattern, prompt):
-                clean = re.sub(phone_pattern, "[PHONE]", prompt)
-            
-            # Simulated prompt injection check
-            injection_patterns = [
-                "ignore prior instructions", "delete database", "drop table",
-                "elimina la base de datos", "elimina toda la base de datos",
-                "borra la base de datos", "ignora las instrucciones"
-            ]
-            for pat in injection_patterns:
-                if pat in prompt.lower():
-                    return False, clean, f"Blocked: injection pattern '{pat}' detected (Simulado)"
-            return True, clean, "Aprobado (Simulado)"
-            
-        def validate_output(self, response: str, context: Optional[str] = None) -> Tuple[bool, str, str]:
-            if "sk-proj-" in response:
-                return False, response.replace("sk-proj-", "sk-proj-[REDACTED]"), "Blocked: API key leak detected (Simulado)"
-            return True, response, "Aprobado (Simulado)"
-
-try:
-    from agent import AutonomousAgent
-    from orchestrator import AgentOrchestrator
-except ImportError:
-    class AutonomousAgent:
-        def __init__(self, name: str, role: str, instruction: str, use_mock_llm: bool = True):
-            self.name = name
-            self.scratchpad = []
-        def add_tool(self, name: str, func: Any):
-            pass
-    class AgentOrchestrator:
-        def __init__(self, name: str):
-            self.agents = {}
-        def register_agent(self, agent: Any):
-            self.agents[agent.name] = agent
-        def execute(self, task: str) -> str:
-            for name, agent in self.agents.items():
-                agent.scratchpad.append((
-                    f"Analizando como procesar '{task}' con rol de {agent.name}",
-                    "search_db",
-                    f"Resultados de busqueda mock del agente {name}"
-                ))
-            return f"Respuesta de orquestacion multi-agente simulada para: {task}."
-
-try:
-    from memory import AgenticMemory
-except ImportError:
-    class AgenticMemory:
-        def __init__(self, decay_factor: float = 0.05, vector_dim: int = 16):
-            self.decay_factor = decay_factor
-            self.facts = []
-        def save_fact(self, fact: str, importance: int = 5):
-            self.facts.append({"fact": fact, "importance": importance, "created_at": time.time()})
-        def recall(self, query: str, top_k: int = 1, current_time: Optional[float] = None) -> List[Dict[str, Any]]:
-            if not current_time:
-                current_time = time.time()
-            results = []
-            for item in self.facts:
-                delta_t = current_time - item["created_at"]
-                retention = math.exp(-self.decay_factor * delta_t)
-                score = retention * (item["importance"] / 10.0)
-                results.append({"fact": item["fact"], "score": score, "decayed_importance": item["importance"] * retention})
-            results.sort(key=lambda x: x["score"], reverse=True)
-            return results[:top_k]
-
-try:
-    from runtime import SecureToolRuntime
-except ImportError:
-    class SecureToolRuntime:
-        def run_code(self, code: str, timeout_seconds: float = 1.5) -> Tuple[bool, str, str, Optional[str]]:
-            forbidden = ["os.", "sys.", "subprocess", "open("]
-            for word in forbidden:
-                if word in code:
-                    return False, "", "", f"SecurityValidationError: Bloqueado por usar llamadas prohibidas '{word}' (Simulado)"
-            return True, "Ejecucion en Sandbox exitosa (Simulado)\nOutput: 42", "", None
-
-try:
-    from generator import SyntheticDataGenerator
-except ImportError:
-    class SyntheticDataGenerator:
-        def __init__(self, min_length: int = 10, dedup_threshold: float = 0.5):
-            pass
-        def generate_instruction_dataset(self, topics: List[str], count_per_topic: int = 2) -> List[Any]:
-            class Item:
-                def __init__(self, inst, out):
-                    self.instruction = inst
-                    self.output = out
-            results = []
-            for t in topics:
-                for i in range(count_per_topic):
-                    results.append(Item(f"Como funciona {t}?", f"Explicacion simulada {i} sobre {t}."))
-            return results
-        def generate_dpo_dataset(self, topics: List[str], count_per_topic: int = 2) -> List[Any]:
-            class DpoItem:
-                def __init__(self, p, c, r):
-                    self.prompt = p
-                    self.chosen = c
-                    self.rejected = r
-            results = []
-            for t in topics:
-                for i in range(count_per_topic):
-                    results.append(DpoItem(f"Explicar {t}", f"Respuesta elegida y optimizada sobre {t}.", f"Respuesta rechazada o alucinada sobre {t}."))
-            return results
-
-try:
-    from dvc import DatasetVCS
-except ImportError:
-    class DatasetVCS:
-        def __init__(self, store_dir: str = ".dvc_hub_store"):
-            self.commits = []
-        def init(self):
-            pass
-        def commit(self, filename: str, message: str) -> str:
-            commit_hash = hashlib.md5(f"{filename}-{message}-{time.time()}".encode()).hexdigest()[:8]
-            self.commits.append({"hash": commit_hash, "message": message, "timestamp": time.time()})
-            return commit_hash
-        def diff(self, commit_a: str, commit_b: str) -> Dict[str, List[Any]]:
-            return {"added": [], "removed": [], "modified": []}
-        def log(self) -> List[Dict[str, Any]]:
-            return self.commits
-
-try:
-    from finetuner import NF4Quantizer, LoraConfig
-except ImportError:
-    class NF4Quantizer:
-        pass
-    class LoraConfig:
-        pass
-
-try:
-    from evaluator import LLMEvaluator
-except ImportError:
-    class LLMEvaluator:
-        @staticmethod
-        def clean_and_tokenize(text: str) -> List[str]:
-            return text.lower().split()
-        @staticmethod
-        def compute_jaccard(tokens1: List[str], tokens2: List[str]) -> float:
-            s1, s2 = set(tokens1), set(tokens2)
-            return len(s1 & s2) / len(s1 | s2) if s1 | s2 else 0.0
-        @staticmethod
-        def compute_cosine_similarity(tokens1: List[str], tokens2: List[str]) -> float:
-            s1, s2 = set(tokens1), set(tokens2)
-            return len(s1 & s2) / (math.sqrt(len(s1)) * math.sqrt(len(s2)) + 1e-9)
-        @staticmethod
-        def compute_bleu(tokens1: List[str], tokens2: List[str]) -> float:
-            s1, s2 = set(tokens1), set(tokens2)
-            return len(s1 & s2) / len(s2) if s2 else 0.0
-
-try:
-    from tracer import GlobalTracer
-except ImportError:
-
-    # Fallback tracer
-    class GlobalTracer:
-        def __init__(self):
-            self.root_spans = []
-        def start_span(self, name, inputs=None, metadata=None):
-            span = {"name": name, "start_time": time.time(), "end_time": None, "inputs": inputs or {}, "metadata": metadata or {}, "children": []}
-            self.root_spans.append(span)
-            return span
-        def end_span(self, outputs=None, error=None, metadata_update=None):
-            if self.root_spans:
-                span = self.root_spans[-1]
-                span["end_time"] = time.time()
-                if outputs: span["outputs"] = outputs
-                if metadata_update: span["metadata"].update(metadata_update)
-        def clear(self):
-            self.root_spans = []
-        def get_trace_tree(self):
-            return self.root_spans
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai_core_infra_hub")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+HUB_DIR = Path(__file__).resolve().parent
+STORAGE = Path(os.environ.get("AICORE_HUB_STORAGE", HUB_DIR / "db_storage"))
+UPLOADS = STORAGE / "uploads.jsonl"
+
+# The components whose READMEs seed the panel's own knowledge base (read from the installed
+# packages' metadata, so the panel documents exactly the versions it runs).
+COMPONENTS = [
+    "bpe-tokenizer-from-scratch", "semantic-chunking-engine", "multimodal-doc-parser",
+    "contrastive-embedding-trainer", "nano-vector-db", "knowledge-graph-extractor",
+    "hybrid-search-retrieval-pipeline", "cross-encoder-reranker", "llm-inference-server",
+    "semantic-model-router", "llm-guardrails-shield", "orchestra-agents", "agentic-memory-layer",
+    "secure-tool-runtime", "synthetic-data-generator", "dataset-version-control",
+    "llm-qlora-finetuner", "llm-eval-harness", "llm-observability-tracer", "llm-annotation-studio",
+]  # fmt: skip
+
+BPE_TRAINING_TEXT = (
+    "El aprendizaje automático y los embeddings vectoriales son fundamentales para el procesamiento "
+    "del lenguaje natural en RAG. Retrieval augmented generation combines search and generation."
+)
+
+
+def make_embedder() -> Embedder:
+    spec = os.environ.get("AICORE_EMBEDDER", "hash")
+    if spec.startswith("st:"):
+        return SentenceTransformerEmbedder(spec[3:])
+    if spec.startswith("ollama:"):
+        return OllamaEmbedder(spec[7:], base_url=os.environ.get("OLLAMA_URL", "http://localhost:11434"))
+    return HashEmbedder(512)
+
+
+def make_generator() -> InferenceClient | None:
+    base = os.environ.get("AICORE_LLM_BASE_URL")
+    if not base:
+        return None
+    return InferenceClient(
+        base, model=os.environ.get("AICORE_LLM_MODEL", "default"), api_key=os.environ.get("AICORE_LLM_API_KEY")
+    )
+
+
+def component_readme(dist: str) -> str:
+    """A component's README as packaged in its metadata (the long description)."""
+    try:
+        md = metadata.metadata(dist)
+    except metadata.PackageNotFoundError:
+        return ""
+    body = md.get_payload() if hasattr(md, "get_payload") else None  # type: ignore[attr-defined]
+    return str(body or md.get("Description") or "")
+
+
+def paragraphs(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+class Hub:
+    """Everything the panel serves, assembled once from the SDK."""
+
+    def __init__(self) -> None:
+        STORAGE.mkdir(parents=True, exist_ok=True)
+        self.embedder = make_embedder()
+        self.generator = make_generator()
+        self.retriever = HybridRetriever(self.embedder, index_type="hnsw")
+        self.reranker = Reranker(offline=os.environ.get("AICORE_RERANKER") != "model")
+        self.rag = RAGPipeline(
+            self.embedder, generator=self.generator, reranker=self.reranker, retriever=self.retriever
+        )
+        self.memory = Memory(self.embedder, path=STORAGE / "memory.json")
+        if len(self.memory) == 0:
+            self.memory.remember("El usuario prefiere respuestas técnicas, con fórmulas cuando ayudan.", importance=9)
+            self.memory.remember("Los componentes de AI Core están escritos desde cero en Python.", importance=8)
+        self.guard = Guard()
+        self.router = Router()
+        self.runtime = ToolRuntime()
+        self.tracer = Tracer()
+        self.tokenizer = BPETokenizer().train(BPE_TRAINING_TEXT, vocab_size=300)
+        self.parser = DocumentParser()
+        self.lock = threading.Lock()
+        self._seed()
+
+    def _seed(self) -> None:
+        chunks: list[Chunk] = []
+        for dist in COMPONENTS:
+            for i, text in enumerate(paragraphs(component_readme(dist))):
+                chunks.append(Chunk(f"{dist}_chunk_{i}", dist, text, i, {"source": f"{dist}/README.md"}))
+        readme = HUB_DIR / "README.md"
+        if readme.exists():
+            for i, text in enumerate(paragraphs(readme.read_text(encoding="utf-8"))):
+                chunks.append(
+                    Chunk(f"ai-core-infra-hub_chunk_{i}", "ai-core-infra-hub", text, i, {"source": "README.md"})
+                )
+        self.retriever.add(chunks)
+        if UPLOADS.exists():
+            for line in UPLOADS.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    item = json.loads(line)
+                    self._index(item["prefix"], item["chunks"], item["source"])
+        logger.info("Hub ready: %d chunks indexed with %s", len(self.retriever), type(self.embedder).__name__)
+
+    def _index(self, prefix: str, texts: list[str], source: str) -> int:
+        chunks = [Chunk(f"{prefix}_chunk_{i}", prefix, t, i, {"source": source}) for i, t in enumerate(texts)]
+        fresh = [c for c in chunks if c.id not in self.retriever.index.texts]
+        return self.retriever.add(fresh)
+
+    def add_document(self, prefix: str, texts: list[str], source: str) -> int:
+        with self.lock:
+            added = self._index(prefix, texts, source)
+            with UPLOADS.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"prefix": prefix, "chunks": texts, "source": source}, ensure_ascii=False) + "\n")
+        return added
+
+
+hub: Hub | None = None
+
+
+def get_hub() -> Hub:
+    global hub
+    if hub is None:
+        hub = Hub()
+    return hub
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    get_hub()
+    yield
+
 
 app = FastAPI(
     title="AI Core Infra Hub",
-    description="Panel unificado de demostración y orquestación para los 21 subproyectos de la infraestructura de IA."
+    description="Panel over the ai-core components, built on the aicore SDK.",
+    lifespan=lifespan,
 )
 
-# Global instances initialization
-global_tracer = GlobalTracer()
-
-# Global pipeline orchestration state
-global_db = None
-global_bm25 = None
-global_memory = None
-global_shield = None
-global_router = None
-global_runtime = None
-global_reranker = None
-global_inference_engine = None
-global_corpus = {}
-
-# Fallback fusion functions if not imported
-try:
-    from fusion import reciprocal_rank_fusion, score_normalization_fusion
-except ImportError:
-    def reciprocal_rank_fusion(dense_ranks, sparse_ranks, k=60):
-        rrf_scores = {}
-        for rank, (score, doc_id) in enumerate(dense_ranks):
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        for rank, (score, doc_id) in enumerate(sparse_ranks):
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        sorted_docs = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
-        return [(score, doc_id) for doc_id, score in sorted_docs]
-
-    def score_normalization_fusion(dense_ranks, sparse_ranks, alpha=0.5, metric="cosine"):
-        fused = {}
-        def normalize(ranks):
-            if not ranks:
-                return {}
-            scores = [s for s, d in ranks]
-            min_s, max_s = min(scores), max(scores)
-            rng = max_s - min_s
-            if rng == 0:
-                return {d: 1.0 for s, d in ranks}
-            return {d: (s - min_s) / rng for s, d in ranks}
-        dense_norm = normalize(dense_ranks)
-        sparse_norm = normalize(sparse_ranks)
-        all_docs = set(dense_norm.keys()) | set(sparse_norm.keys())
-        for doc_id in all_docs:
-            d_s = dense_norm.get(doc_id, 0.0)
-            s_s = sparse_norm.get(doc_id, 0.0)
-            fused[doc_id] = alpha * d_s + (1.0 - alpha) * s_s
-        sorted_docs = sorted(fused.items(), key=lambda x: x[1], reverse=True)
-        return [(score, doc_id) for doc_id, score in sorted_docs]
-
-DB_STORAGE_DIR = os.path.join(HUB_DIR, "db_storage")
-DB_FILEPATH = os.path.join(DB_STORAGE_DIR, "nano_vector_db.pkl")
-CORPUS_FILEPATH = os.path.join(DB_STORAGE_DIR, "global_corpus.pkl")
-
-def save_global_pipeline_state():
-    global global_db, global_corpus
-    if global_db is not None and global_corpus is not None:
-        try:
-            os.makedirs(DB_STORAGE_DIR, exist_ok=True)
-            if hasattr(global_db, "save"):
-                global_db.save(DB_FILEPATH)
-            else:
-                with open(DB_FILEPATH, "wb") as f:
-                    pickle.dump(global_db, f)
-            with open(CORPUS_FILEPATH, "wb") as f:
-                pickle.dump(global_corpus, f)
-            logger.info("[+] Persistent database state saved successfully.")
-        except Exception as e:
-            logger.error(f"[-] Failed to save persistent database: {e}")
-
-def init_global_pipeline():
-    global global_db, global_bm25, global_memory, global_shield, global_router, global_runtime, global_corpus, global_reranker, global_inference_engine
-    
-    provider = MockEmbeddingProvider(dimension=768)
-    loaded_from_disk = False
-    
-    # 1. Try to load from disk
-    if os.path.exists(DB_FILEPATH) and os.path.exists(CORPUS_FILEPATH):
-        try:
-            if hasattr(NanoVectorDB, "load"):
-                global_db = NanoVectorDB.load(DB_FILEPATH)
-            else:
-                with open(DB_FILEPATH, "rb") as f:
-                    global_db = pickle.load(f)
-            with open(CORPUS_FILEPATH, "rb") as f:
-                global_corpus = pickle.load(f)
-            loaded_from_disk = True
-            logger.info(f"[+] Loaded persistent database from disk. Corpus size: {len(global_corpus)} documents.")
-        except Exception as e:
-            logger.error(f"[-] Failed to load persistent database: {e}. Reinitializing from scratch.")
-            global_db = None
-            global_corpus = None
-            
-    # 2. If load failed or file doesn't exist, initialize from scratch
-    if not loaded_from_disk or global_db is None or global_corpus is None:
-        global_db = NanoVectorDB(dimension=768, index_type="hnsw")
-        corpus = {}
-        docs_to_index = []
-        
-        for p in PROJECT_PATHS:
-            readme_path = os.path.join(HUB_DIR, p, "README.md")
-            if not os.path.exists(readme_path):
-                readme_path = os.path.join(PARENT_DIR, p, "README.md")
-                
-            if os.path.exists(readme_path):
-                try:
-                    with open(readme_path, "r", encoding="utf-8") as f:
-                        text = f.read()
-                    # Chunk by double newlines to keep lists and paragraphs together
-                    chunks = [s.strip() for s in text.split("\n\n") if s.strip()]
-                    for i, c in enumerate(chunks):
-                        doc_id = f"{p}_chunk_{i}"
-                        corpus[doc_id] = c
-                        docs_to_index.append((doc_id, c, {"source": f"{p}/README.md"}))
-                except Exception as e:
-                    logger.error(f"Error indexing {p} README: {e}")
-                    
-        # Index PROJECTS.md
-        projects_file = os.path.join(PARENT_DIR, "PROJECTS.md")
-        if os.path.exists(projects_file):
-            try:
-                with open(projects_file, "r", encoding="utf-8") as f:
-                    text = f.read()
-                chunks = [s.strip() for s in text.split("\n\n") if s.strip()]
-                for i, c in enumerate(chunks):
-                    doc_id = f"projects_chunk_{i}"
-                    corpus[doc_id] = c
-                    docs_to_index.append((doc_id, c, {"source": "PROJECTS.md"}))
-            except Exception as e:
-                logger.error(f"Error indexing PROJECTS.md: {e}")
-                
-        # Insert documents into Vector DB (Batched generation for performance)
-        if docs_to_index:
-            texts_to_embed = [item[1] for item in docs_to_index]
-            all_vecs = provider.get_embeddings(texts_to_embed)
-            for (doc_id, text_content, meta), vec in zip(docs_to_index, all_vecs):
-                vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
-                global_db.insert(id=doc_id, vector=vec_768, metadata=meta)
-            
-        global_corpus = corpus
-        # Save to disk
-        save_global_pipeline_state()
-        logger.info(f"[+] Initialized new database from scratch. Corpus size: {len(global_corpus)} documents.")
-        
-    # 3. Fit BM25
-    global_bm25 = BM25Retriever()
-    if global_corpus:
-        global_bm25.fit(global_corpus)
-    else:
-        global_bm25.fit({"doc_default": "La infraestructura unificada de IA conecta todos los submodulos."})
-        
-    # 4. Initialize remaining system components
-    global_reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-    global_memory = AgenticMemory(decay_factor=0.01, vector_dim=16)
-    global_memory.save_fact("El usuario prefiere respuestas tecnicas y explicaciones con formulas matematicas.", importance=9)
-    global_memory.save_fact("Los subproyectos de la infraestructura estan construidos artesanalmente en Python.", importance=8)
-    global_shield = LLMGuardrailsShield()
-    global_router = SemanticModelRouter()
-    global_runtime = SecureToolRuntime()
-    
-    if global_inference_engine is None:
-        try:
-            global_inference_engine = InferenceEngine(model_name="Qwen/Qwen2.5-0.5B-Instruct", use_local_model=True)
-            logger.info("[+] Loaded local InferenceEngine with Qwen/Qwen2.5-0.5B-Instruct.")
-        except Exception as e:
-            logger.error(f"[-] Failed to load local InferenceEngine: {e}")
-            global_inference_engine = None
-            
-    logger.info(f"[+] Global pipeline setup complete. Ready to serve requests.")
-
-@app.on_event("startup")
-def startup_event():
-    init_global_pipeline()
 
 class DocumentUploadRequest(BaseModel):
     title: str
     content: str
 
+
 class TokenizeRequest(BaseModel):
     text: str
+
 
 class ChunkRequest(BaseModel):
     text: str
     threshold: float = 1.2
 
+
 class ParseRequest(BaseModel):
     filename: str
     content: str
+
 
 class SimilarityRequest(BaseModel):
     text1: str
     text2: str
 
+
 class VectorInsertRequest(BaseModel):
     id: str
     text: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 class VectorQueryRequest(BaseModel):
     query: str
     top_k: int = 3
-    filter: Optional[Dict[str, Any]] = None
+    filter: dict[str, Any] | None = None
+
 
 class KGExtractRequest(BaseModel):
     text: str
+
 
 class HybridSearchRequest(BaseModel):
     query: str
     alpha: float = 0.5
 
+
 class RerankRequest(BaseModel):
     query: str
-    documents: List[str]
+    documents: list[str]
+
 
 class RouterRequest(BaseModel):
     prompt: str
 
+
 class GuardrailsRequest(BaseModel):
     prompt: str
-    context: Optional[str] = None
-    response_to_check: Optional[str] = None
+    response_to_check: str | None = None
+    context: str | None = None
+
 
 class AgentRequest(BaseModel):
     task: str
 
+
 class MemorySaveRequest(BaseModel):
     fact: str
     importance: int = 5
+
 
 class MemoryRecallRequest(BaseModel):
     query: str
     decay_factor: float = 0.05
     time_elapsed: float = 0.0
 
+
 class RunCodeRequest(BaseModel):
     code: str
 
+
 class SyntheticRequest(BaseModel):
-    topics: List[str]
+    topics: list[str]
     count: int = 3
+
 
 class DVCCommitRequest(BaseModel):
     filename: str
-    data: List[Dict[str, Any]]
+    data: list[dict[str, Any]]
     message: str
+
+
+class DVCDiffRequest(BaseModel):
+    commit_a: str
+    commit_b: str
+
 
 class QLoraTrainRequest(BaseModel):
     r: int = 8
-    alpha: float = 16.0
-    epochs: int = 3
+    alpha: int = 16
+    epochs: int = 5
+
 
 class BenchmarkRequest(BaseModel):
     candidate: str
     reference: str
 
+
 class UnifiedPipelineRequest(BaseModel):
     prompt: str
-    context: Optional[str] = None
+    context: str | None = None
 
-# --- ENDPOINTS ---
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index():
-    template_path = os.path.join(HUB_DIR, "templates", "index.html")
-    if not os.path.exists(template_path):
-        raise HTTPException(status_code=404, detail="Plantilla index.html no encontrada.")
-    with open(template_path, "r", encoding="utf-8") as f:
-        return f.read()
+async def get_index() -> str:
+    template = HUB_DIR / "templates" / "index.html"
+    if not template.exists():
+        raise HTTPException(status_code=404, detail="templates/index.html not found")
+    return template.read_text(encoding="utf-8")
 
-# 1. BPE Tokenizer
+
+# --- RAG -------------------------------------------------------------------------------------
+
+
 @app.post("/api/bpe/tokenize")
-def api_bpe_tokenize(req: TokenizeRequest):
-    if not BPETokenizer:
-        return {"error": "BPE Tokenizer no importado."}
-    # Creamos un tokenizador temporal y lo entrenamos con un texto base o cargamos existente
-    tokenizer = BPETokenizer()
-    base_text = "El aprendizaje automático y los embeddings vectoriales son fundamentales para el procesamiento del lenguaje natural en RAG."
-    tokenizer.train(base_text, vocab_size=300)
-    tokens = tokenizer.encode(req.text)
-    decoded = [tokenizer.decode([t]) for t in tokens]
-    return {
-        "tokens": tokens,
-        "splits": decoded,
-        "reconstructed": tokenizer.decode(tokens)
-    }
+def api_bpe_tokenize(req: TokenizeRequest) -> dict[str, Any]:
+    tok = get_hub().tokenizer
+    ids = tok.encode(req.text)
+    return {"tokens": ids, "splits": tok.pieces(req.text), "reconstructed": tok.decode(ids)}
 
-# 2. Semantic Chunker
+
 @app.post("/api/chunker/chunk")
-def api_chunker_chunk(req: ChunkRequest):
-    if not SemanticChunker or not MockEmbeddingProvider:
-        return {"error": "Semantic Chunker o MockEmbeddingProvider no importados."}
-    provider = MockEmbeddingProvider()
-    chunker = SemanticChunker(embedding_provider=provider, threshold_factor=req.threshold)
-    chunks_raw = chunker.chunk_text(req.text)
-    chunks = [c["text"] for c in chunks_raw]
-    return {"chunks": chunks}
+def api_chunker_chunk(req: ChunkRequest) -> dict[str, Any]:
+    h = get_hub()
+    chunks = Chunker(h.embedder, tokenizer=h.tokenizer, threshold=req.threshold).split(Document("input", req.text))
+    return {"chunks": [c.text for c in chunks], "tokens": [c.metadata.get("tokens") for c in chunks]}
 
 
-# 3. Multimodal Parser
 @app.post("/api/parser/parse")
-def api_parser_parse(req: ParseRequest):
-    # Simulamos parsear guardando un archivo ficticio y llamando LocalExtractBackend
-    if not MultimodalDocParser or not LocalExtractBackend:
-        return {"error": "Multimodal Parser o LocalExtractBackend no importados."}
-    temp_file = "temp_parsing.pdf"
-    # Dado que no es un PDF real, simulamos el Markdown retornado
-    markdown = f"# Documento Extraido: {req.filename}\n\n{req.content}\n\n*Nota: Procesado mediante LocalExtractBackend.*"
-    return {"markdown": markdown}
+def api_parser_parse(req: ParseRequest) -> dict[str, Any]:
+    suffix = Path(req.filename).suffix or ".txt"
+    if suffix.lower() == ".pdf":
+        raise HTTPException(status_code=400, detail="Upload PDFs through /api/documents/upload-file")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"input{suffix}"
+        path.write_text(req.content, encoding="utf-8")
+        doc = get_hub().parser.parse(path, document_id=Path(req.filename).name)
+    return {"markdown": f"# {doc.id}\n\n{doc.text}"}
 
-# 5. Contrastive Similarity
+
 @app.post("/api/contrastive/similarity")
-def api_contrastive_similarity(req: SimilarityRequest):
-    # Usamos MockEmbeddingProvider para simular la codificación y calculamos coseno
-    if not MockEmbeddingProvider:
-        return {"error": "MockEmbeddingProvider no importado."}
-    provider = MockEmbeddingProvider()
-    v1 = np.array(provider.get_embeddings([req.text1])[0])
-    v2 = np.array(provider.get_embeddings([req.text2])[0])
-    sim = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-    return {"similarity": sim}
+def api_contrastive_similarity(req: SimilarityRequest) -> dict[str, Any]:
+    h = get_hub()
+    v1, v2 = h.embedder.embed([req.text1, req.text2])
+    return {"similarity": cosine(v1, v2), "embedder": type(h.embedder).__name__}
 
-# 6. Nano Vector DB
+
+PLAYGROUND = [
+    ("doc1", "Bases de datos vectoriales HNSW", {"category": "database"}),
+    ("doc2", "Procesamiento de embeddings semanticos", {"category": "embeddings"}),
+    ("doc3", "Agentes y planificadores autonomos ReAct", {"category": "agents"}),
+]
+_playground: VectorIndex | None = None
+
+
+def playground() -> VectorIndex:
+    global _playground
+    if _playground is None:
+        h = get_hub()
+        _playground = VectorIndex(h.embedder.dimension, index_type="hnsw")
+        for doc_id, text, meta in PLAYGROUND:
+            _playground.add(doc_id, h.embedder.embed([text])[0], text, meta)
+    return _playground
+
+
 @app.post("/api/vector-db/insert")
-def api_vector_db_insert(req: VectorInsertRequest):
-    if not NanoVectorDB or not MockEmbeddingProvider:
-        return {"error": "NanoVectorDB o MockEmbeddingProvider no importados."}
-    db = NanoVectorDB(dimension=768, index_type="hnsw")
-    provider = MockEmbeddingProvider()
-    vec = provider.get_embeddings([req.text])[0]
-    vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
-    db.insert(id=req.id, vector=vec_768, metadata=req.metadata)
-    return {"status": "success", "id": req.id}
+def api_vector_db_insert(req: VectorInsertRequest) -> dict[str, Any]:
+    index = playground()
+    index.add(req.id, get_hub().embedder.embed([req.text])[0], req.text, req.metadata)
+    return {"status": "success", "id": req.id, "size": len(index)}
+
 
 @app.post("/api/vector-db/query")
-def api_vector_db_query(req: VectorQueryRequest):
-    if not NanoVectorDB or not MockEmbeddingProvider:
-        return {"error": "NanoVectorDB o MockEmbeddingProvider no importados."}
-    db = NanoVectorDB(dimension=768, index_type="hnsw")
-    provider = MockEmbeddingProvider()
-    # Insertamos unos vectores mock de prueba
-    docs = [
-        ("doc1", "Bases de datos vectoriales HNSW", {"category": "database"}),
-        ("doc2", "Procesamiento de embeddings semanticos", {"category": "embeddings"}),
-        ("doc3", "Agentes y planificadores autonomos ReAct", {"category": "agents"})
-    ]
-    for doc_id, text, meta in docs:
-        vec = provider.get_embeddings([text])[0]
-        vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
-        db.insert(id=doc_id, vector=vec_768, metadata=meta)
-        
-    query_vec = provider.get_embeddings([req.query])[0]
-    query_768 = query_vec[:768] if len(query_vec) >= 768 else query_vec + [0.0]*(768-len(query_vec))
-    results = db.query(vector=query_768, top_k=req.top_k, filter=req.filter)
-    # Formateamos
-    formatted = []
-    for r in results:
-        formatted.append({"id": r["id"], "distance": float(r["distance"]), "metadata": r["metadata"]})
-    return {"results": formatted}
+def api_vector_db_query(req: VectorQueryRequest) -> dict[str, Any]:
+    hits = playground().search(get_hub().embedder.embed([req.query])[0], k=req.top_k, where=req.filter)
+    return {
+        "results": [
+            {"id": h.id, "distance": h.signals.get("dense_distance"), "score": h.score, "metadata": dict(h.metadata)}
+            for h in hits
+        ]
+    }
 
-# 7. Knowledge Graph Extractor
+
+@app.get("/api/vector-db/list")
+def api_vector_db_list() -> dict[str, Any]:
+    index = get_hub().retriever.index
+    records = [
+        {
+            "id": str(doc_id),
+            "metadata": index.db.metadata.get(doc_id, {}),
+            "text": index.texts.get(str(doc_id), ""),
+            "vector_preview": [round(float(x), 4) for x in list(vec)[:5]],
+        }
+        for doc_id, vec in index.db.vectors.items()
+    ]
+    return {"status": "success", "records": records}
+
+
 @app.post("/api/knowledge-graph/extract")
-def api_kg_extract(req: KGExtractRequest):
-    # Simulador offline del extractor semantico de relaciones
-    text_lower = req.text.lower()
-    nodes = [{"id": "UserText", "type": "root", "val": 15}]
-    links = []
-    
-    concepts = {
-        "rag": "RAG Pipeline",
-        "lora": "LoRA Adapter",
-        "vector": "Vector Database",
-        "dvc": "Version Control"
-    }
-    
-    for key, name in concepts.items():
-        if key in text_lower:
-            nodes.append({"id": name, "type": "concept", "val": 10})
-            links.append({"source": "UserText", "target": name, "value": 1})
-            
-    cypher_queries = [
-        f"MERGE (n:Root {{id: 'UserText'}})"
+def api_kg_extract(req: KGExtractRequest) -> dict[str, Any]:
+    triples = GraphExtractor().extract(req.text)
+    names: dict[str, str] = {}
+    for t in triples:
+        names.setdefault(t.subject, t.subject_type or "entity")
+        names.setdefault(t.object, t.object_type or "entity")
+    nodes = [{"id": n, "type": kind, "val": 10} for n, kind in names.items()]
+    links = [{"source": t.subject, "target": t.object, "label": t.relation, "value": 1} for t in triples]
+
+    def q(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("'", "\\'")
+
+    cypher = [f"MERGE (:Entity {{id: '{q(n)}', type: '{q(k)}'}})" for n, k in names.items()]
+    rel = [re.sub(r"\W+", "_", t.relation).upper() or "RELATED_TO" for t in triples]
+    cypher += [
+        f"MATCH (a:Entity {{id: '{q(t.subject)}'}}), (b:Entity {{id: '{q(t.object)}'}}) MERGE (a)-[:{r}]->(b)"
+        for t, r in zip(triples, rel, strict=True)
     ]
-    for n in nodes[1:]:
-        cypher_queries.append(f"MERGE (c:Concept {{id: '{n['id']}'}})")
-        cypher_queries.append(f"MERGE (n:Root {{id: 'UserText'}})-[:CONTAINS]->(c:Concept {{id: '{n['id']}'}})")
-        
-    return {
-        "nodes": nodes,
-        "links": links,
-        "cypher": "\n".join(cypher_queries)
-    }
+    return {"nodes": nodes, "links": links, "cypher": "\n".join(cypher)}
 
-# 8. Hybrid Search Pipeline
+
+HYBRID_DEMO = {
+    "doc1": "La arquitectura RAG combina busqueda clasica BM25 y busqueda vectorial semantica HNSW.",
+    "doc2": "Los adaptadores LoRA e inferencia en NormalFloat4 optimizan el consumo de VRAM en PyTorch.",
+    "doc3": "La capa de memoria de largo plazo episódica simula la curva del olvido de Ebbinghaus temporal.",
+}
+
+
 @app.post("/api/hybrid-search/search")
-def api_hybrid_search(req: HybridSearchRequest):
-    if not NanoVectorDB or not BM25Retriever:
-        return {"error": "NanoVectorDB o BM25Retriever no importados."}
-    
-    # Corpus de prueba
-    corpus = {
-        "doc1": "La arquitectura RAG combina busqueda clasica BM25 y busqueda vectorial semantica HNSW.",
-        "doc2": "Los adaptadores LoRA e inferencia en NormalFloat4 optimizan el consumo de VRAM en PyTorch.",
-        "doc3": "La capa de memoria de largo plazo episódica simula la curva del olvido de Ebbinghaus temporal."
-    }
-    
-    # 1. Sparse BM25
-    bm25 = BM25Retriever()
-    bm25.fit(corpus)
-    sparse_res = bm25.retrieve(req.query, top_k=3)
-    
-    # 2. Dense DB
-    db = NanoVectorDB(dimension=16, index_type="hnsw")
-    # Generador hash local
-    for doc_id, text in corpus.items():
-        # Generar hash vector de 16 dim
-        vec = [float(abs(hash(text + str(i))) % 100) / 100.0 for i in range(16)]
-        db.insert(id=doc_id, vector=vec, metadata={"text": text})
-        
-    q_vec = [float(abs(hash(req.query + str(i))) % 100) / 100.0 for i in range(16)]
-    dense_raw = db.query(q_vec, top_k=3)
-    dense_res = [(r["distance"], r["id"]) for r in dense_raw]
-    
-    # 3. Fusion
-    rrf_res = reciprocal_rank_fusion(dense_res, sparse_res, k=10)
-    score_res = score_normalization_fusion(dense_res, sparse_res, alpha=req.alpha, metric="cosine")
-    
+def api_hybrid_search(req: HybridSearchRequest) -> dict[str, Any]:
+    retriever = HybridRetriever(get_hub().embedder)
+    retriever.add(Chunk(i, i, t, 0) for i, t in HYBRID_DEMO.items())
+
+    def view(hits: list[Any]) -> list[dict[str, Any]]:
+        return [{"id": h.id, "score": h.score, **dict(h.signals)} for h in hits]
+
     return {
-        "sparse": [{"id": doc_id, "score": float(score)} for score, doc_id in sparse_res],
-        "dense": [{"id": r["id"], "distance": float(r["distance"])} for r in dense_raw],
-        "rrf": [{"id": doc_id, "score": float(score)} for score, doc_id in rrf_res],
-        "score_fusion": [{"id": doc_id, "score": float(score)} for score, doc_id in score_res]
+        "sparse": view(retriever.sparse_search(req.query, k=3)),
+        "dense": view(retriever.dense_search(req.query, k=3)),
+        "rrf": view(retriever.search(req.query, k=3, fusion="rrf")),
+        "score_fusion": view(retriever.search(req.query, k=3, fusion="score", alpha=req.alpha)),
     }
 
-# 9. Cross Encoder Reranker
+
 @app.post("/api/reranker/rerank")
-def api_reranker_rerank(req: RerankRequest):
-    if not CrossEncoderReranker:
-        return {"error": "CrossEncoderReranker no importado."}
-    # Usamos modo offline para evitar descargar modelo de HF
-    reranker = CrossEncoderReranker(model_name="dummy", device="cpu")
-    reranker.is_online = False
-    
-    docs_dict = [{"id": i, "text": doc} for i, doc in enumerate(req.documents)]
-    reranked = reranker.rerank(req.query, docs_dict, top_k=len(req.documents))
-    
+def api_reranker_rerank(req: RerankRequest) -> dict[str, Any]:
+    from aicore import Hit
+
+    hits = [Hit(str(i), d, 0.0) for i, d in enumerate(req.documents)]
+    reranked = get_hub().reranker.rerank(req.query, hits, k=len(hits))
+    return {"results": [{"id": int(h.id), "text": h.text, "score": h.score} for h in reranked]}
+
+
+# --- Inference -------------------------------------------------------------------------------
+
+
+def require_generator() -> InferenceClient:
+    gen = get_hub().generator
+    if gen is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No inference backend: set AICORE_LLM_BASE_URL to an OpenAI-compatible server "
+            "(llm-inference-server, Ollama /v1, llama.cpp).",
+        )
+    return gen
+
+
+@app.post("/api/inference/generate")
+def api_inference_generate(req: RouterRequest) -> dict[str, Any]:
+    gen = require_generator().chat([{"role": "user", "content": req.prompt}], max_tokens=256)
     return {
-        "results": [{"id": r["id"], "text": r["text"], "score": float(r["rerank_score"])} for r in reranked]
+        "text": gen.text,
+        "model": gen.model,
+        "latency_ms": round(gen.latency_s * 1000, 1),
+        "prompt_tokens": gen.prompt_tokens,
+        "completion_tokens": gen.completion_tokens,
     }
 
-# 10. LLM Inference Server (Dynamic Batching & Streaming)
-@app.post("/api/inference/generate")
-async def api_inference_generate(req: RouterRequest):
-    # Simulamos el dynamic batching con un pequeño retardo
-    await asyncio.sleep(0.06)
-    # Inferencia simulada
-    text = f"[Inferencia Procesada] Respuesta al prompt: '{req.prompt}'. Procesado con Dynamic Batching."
-    return {"text": text, "latency_ms": 60.0, "batch_size": 1}
 
 @app.post("/api/inference/generate_stream")
-def api_inference_stream(req: RouterRequest):
-    async def sse_generator():
-        # Emitir tokens simulados
+def api_inference_stream(req: RouterRequest) -> StreamingResponse:
+    gen = require_generator()
+
+    def events() -> Iterator[str]:
         yield "data: [START]\n\n"
-        words = f"Inferencia en streaming simulado para el prompt: {req.prompt}. Completado exitosamente.".split(" ")
-        for word in words:
-            yield f"data: {word} \n\n"
-            await asyncio.sleep(0.04)
+        try:
+            for delta in gen.stream([{"role": "user", "content": req.prompt}], max_tokens=256):
+                yield f"data: {delta}\n\n"
+        except Exception as exc:  # the stream has started: report in-band
+            yield f"data: [ERROR] {exc}\n\n"
         yield "data: [DONE]\n\n"
-    return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
-# 11. Semantic Router
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+# --- Agents ----------------------------------------------------------------------------------
+
+
 @app.post("/api/router/route")
-def api_router_route(req: RouterRequest):
-    if not SemanticModelRouter:
-        return {"error": "SemanticModelRouter no importado."}
-    router = SemanticModelRouter()
-    decision = router.route(req.prompt)
+def api_router_route(req: RouterRequest) -> dict[str, Any]:
+    d = get_hub().router.route(req.prompt)
     return {
-        "selected_model": decision.selected_model,
-        "reason": decision.reason,
-        "estimated_cost": decision.estimated_cost_per_1k_tokens,
-        "complexity": decision.complexity_category,
-        "path": decision.routing_path
+        "selected_model": d.label,
+        "reason": d.reason,
+        "estimated_cost": d.estimated_cost_per_1k_tokens,
+        "confidence": d.confidence,
+        "path": d.path,
     }
 
-# 12. LLM Guardrails Shield
+
 @app.post("/api/guardrails/check")
-def api_guardrails_check(req: GuardrailsRequest):
-    if not LLMGuardrailsShield:
-        return {"error": "LLMGuardrailsShield no importado."}
-    shield = LLMGuardrailsShield()
-    
-    input_safe, clean_prompt, input_reason = shield.validate_input(req.prompt)
-    
-    output_safe = True
-    clean_output = ""
-    output_reason = ""
-    if req.response_to_check:
-        output_safe, clean_output, output_reason = shield.validate_output(req.response_to_check, req.context)
-        
+def api_guardrails_check(req: GuardrailsRequest) -> dict[str, Any]:
+    guard = get_hub().guard
+    inp = guard.check_input(req.prompt)
+    out = guard.check_output(req.response_to_check, req.context) if req.response_to_check else None
     return {
-        "input": {
-            "safe": input_safe,
-            "processed": clean_prompt,
-            "reason": input_reason
-        },
+        "input": {"safe": inp.allowed, "processed": inp.text, "reason": inp.reason, "category": inp.category},
         "output": {
-            "safe": output_safe,
-            "processed": clean_output,
-            "reason": output_reason
-        }
+            "safe": out.allowed if out else True,
+            "processed": out.text if out else "",
+            "reason": out.reason if out else "",
+            "category": out.category if out else "",
+        },
     }
 
-# 13. Orchestra Agents
-@app.post("/api/agents/run")
-def api_agents_run(req: AgentRequest):
-    if not AutonomousAgent or not AgentOrchestrator:
-        return {"error": "AutonomousAgent o AgentOrchestrator no importados."}
-        
-    async def run_agents():
-        orchestrator = AgentOrchestrator(name="HubSupervisor")
-        researcher = AutonomousAgent("ResearcherAgent", "Investigador", "Busca datos en la DB.", use_mock_llm=True)
-        writer = AutonomousAgent("WriterAgent", "Redactor", "Redacta informes tecnicos.", use_mock_llm=True)
-        
-        # Registrar herramientas mock
-        researcher.add_tool("search_db", lambda q: f"Especificaciones de {q}: HNSW, similitud coseno, in-memory.")
-        writer.add_tool("write_report", lambda t: f"INFORME FINAL: {t}")
-        
-        orchestrator.register_agent(researcher)
-        orchestrator.register_agent(writer)
-        
-        result = orchestrator.execute(req.task)
-        
-        # Logs de los scratchpads
-        logs = []
-        for name, agent in orchestrator.agents.items():
-            for thought, act, obs in agent.scratchpad:
-                logs.append(f"[{name}] Thought: {thought} | Action: {act} -> Obs: {obs}")
-                
-        return {"result": result, "logs": logs}
-        
-    # Ejecutamos de forma sincrona para la API REST
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    res = loop.run_until_complete(run_agents())
-    loop.close()
-    return res
 
-# 14. Agentic Memory Layer (Ebbinghaus Decay)
+@app.post("/api/agents/run")
+def api_agents_run(req: AgentRequest) -> dict[str, Any]:
+    h = get_hub()
+    orch = Orchestrator(name="HubSupervisor")
+
+    def search_db(query: str) -> str:
+        hits = h.retriever.search(query, k=2)
+        return " | ".join(hit.text[:200] for hit in hits) or "sin resultados"
+
+    orch.add_agent(
+        "ResearcherAgent", "Investigador", "Busca datos en la base de conocimiento.", {"search_db": search_db}
+    )
+    orch.add_agent("WriterAgent", "Redactor", "Redacta informes técnicos.", {"write_report": lambda t: f"INFORME: {t}"})
+    return {"plan": orch.plan(req.task), "result": orch.run(req.task)}
+
+
 @app.post("/api/memory/save")
-def api_memory_save(req: MemorySaveRequest):
-    if not AgenticMemory:
-        return {"error": "AgenticMemory no importado."}
-    memory = AgenticMemory(decay_factor=0.05, vector_dim=16)
-    memory.save_fact(req.fact, importance=req.importance)
-    # Extraemos hechos locales del fallback
-    return {"status": "success", "saved_fact": req.fact}
+def api_memory_save(req: MemorySaveRequest) -> dict[str, Any]:
+    fact_id = get_hub().memory.remember(req.fact, importance=req.importance)
+    return {"status": "success", "id": fact_id, "saved_fact": req.fact}
+
 
 @app.post("/api/memory/recall")
-def api_memory_recall(req: MemoryRecallRequest):
-    if not AgenticMemory:
-        return {"error": "AgenticMemory no importado."}
-    memory = AgenticMemory(decay_factor=req.decay_factor, vector_dim=16)
-    
-    # Poblamos de forma controlada modificando los timestamps de creacion para simular el olvido
-    t0 = time.time() - req.time_elapsed
-    memory.save_fact("Al usuario le gusta programar en Python", importance=8)
-    memory.fallback_db[-1]["created_at"] = t0  # Retrocedemos en el tiempo
-    
-    results = memory.recall(req.query, top_k=1, current_time=time.time())
-    return {"results": results}
+def api_memory_recall(req: MemoryRecallRequest) -> dict[str, Any]:
+    h = get_hub()
+    now = time.time()
+    stored = [vars_of(m) for m in h.memory.recall(req.query, k=3, now=now + req.time_elapsed)]
+    # The decay demo: one fact created `time_elapsed` seconds ago, forgotten at rate λ.
+    half_life_days = (math.log(2) / req.decay_factor) / 86400.0 if req.decay_factor > 0 else None
+    demo = Memory(h.embedder, half_life_days=half_life_days)
+    demo.remember("Al usuario le gusta programar en Python", importance=8, created_at=now - req.time_elapsed)
+    return {"results": [vars_of(m) for m in demo.recall(req.query, k=1, now=now)], "stored": stored}
 
-# 15. Secure Tool Runtime Sandbox
+
+def vars_of(hit: Any) -> dict[str, Any]:
+    return {
+        "id": hit.id,
+        "fact": hit.text,
+        "recall_score": hit.score,
+        "importance": hit.importance,
+        "created_at": hit.created_at,
+    }
+
+
 @app.post("/api/runtime/run")
-def api_runtime_run(req: RunCodeRequest):
-    if not SecureToolRuntime:
-        return {"error": "SecureToolRuntime no importado."}
-    runtime = SecureToolRuntime()
-    success, stdout, stderr, err = runtime.run_code(req.code, timeout_seconds=1.5)
-    return {
-        "success": success,
-        "stdout": stdout,
-        "stderr": stderr,
-        "error": err
-    }
+def api_runtime_run(req: RunCodeRequest) -> dict[str, Any]:
+    r = get_hub().runtime.run(req.code, timeout_s=1.5)
+    return {"success": r.ok, "stdout": r.stdout, "stderr": r.stderr, "error": r.error, "duration_s": r.duration_s}
 
-# 16. Synthetic Data Generator
+
+# --- Ops -------------------------------------------------------------------------------------
+
+
 @app.post("/api/synthetic/generate")
-def api_synthetic_generate(req: SyntheticRequest):
-    if not SyntheticDataGenerator:
-        return {"error": "SyntheticDataGenerator no importado."}
-    generator = SyntheticDataGenerator(min_length=10, dedup_threshold=0.50)
-    instructions = generator.generate_instruction_dataset(req.topics, count_per_topic=req.count)
-    dpo_samples = generator.generate_dpo_dataset(req.topics, count_per_topic=req.count)
-    
+def api_synthetic_generate(req: SyntheticRequest) -> dict[str, Any]:
+    gen = SyntheticData(min_length=10, dedup_threshold=0.5)
     return {
-        "instructions": [{"prompt": i.instruction, "output": i.output} for i in instructions],
-        "dpo": [{"prompt": d.prompt, "chosen": d.chosen, "rejected": d.rejected} for d in dpo_samples]
+        "instructions": [
+            {"prompt": r["instruction"], "output": r["output"]} for r in gen.instructions(req.topics, req.count)
+        ],
+        "dpo": gen.preferences(req.topics, req.count),
     }
 
-# 17. Dataset Version Control (DVC)
+
+def dataset_repo() -> DatasetRepo:
+    return DatasetRepo(STORAGE / "dvc_store")
+
+
 @app.post("/api/dvc/commit")
-def api_dvc_commit(req: DVCCommitRequest):
-    if not DatasetVCS:
-        return {"error": "DatasetVCS no importado."}
-    vcs = DatasetVCS(store_dir=".dvc_hub_store")
-    vcs.init()
-    
-    # Guardamos temporalmente el JSON
-    filepath = req.filename
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(req.data, f)
-        
-    commit_hash = vcs.commit(filepath, req.message)
-    return {"commit_hash": commit_hash, "log": vcs.log()}
+def api_dvc_commit(req: DVCCommitRequest) -> dict[str, Any]:
+    datasets = STORAGE / "datasets"
+    datasets.mkdir(parents=True, exist_ok=True)
+    path = datasets / (Path(req.filename).name or "dataset.json")  # never write outside storage
+    path.write_text(json.dumps(req.data, ensure_ascii=False), encoding="utf-8")
+    repo = dataset_repo()
+    return {"commit_hash": repo.commit(path, req.message), "log": repo.log()}
+
 
 @app.post("/api/dvc/diff")
-def api_dvc_diff(req: Dict[str, str]):
-    if not DatasetVCS:
-        return {"error": "DatasetVCS no importado."}
-    vcs = DatasetVCS(store_dir=".dvc_hub_store")
-    res = vcs.diff(req["commit_a"], req["commit_b"])
-    return res
+def api_dvc_diff(req: DVCDiffRequest) -> dict[str, Any]:
+    return dataset_repo().diff(req.commit_a, req.commit_b)
+
 
 @app.get("/api/dvc/log")
-def api_dvc_log():
-    if not DatasetVCS:
-        return {"error": "DatasetVCS no importado."}
-    vcs = DatasetVCS(store_dir=".dvc_hub_store")
-    return vcs.log()
+def api_dvc_log() -> list[dict[str, Any]]:
+    return dataset_repo().log()
 
-# 18. QLora Finetuner NF4 Simulator
+
 @app.post("/api/qlora/train")
-def api_qlora_train(req: QLoraTrainRequest):
-    # Simula el bucle de entrenamiento y descenso de perdida
-    loss_history = []
-    current_loss = 0.85
-    for epoch in range(1, req.epochs + 1):
-        # Descenso de pérdida simulado
-        current_loss -= float(np.random.uniform(0.1, 0.25))
-        current_loss = max(0.005, current_loss)
-        loss_history.append({"epoch": epoch, "loss": current_loss})
-        
-    return {
-        "status": "success",
-        "rank": req.r,
-        "alpha": req.alpha,
-        "loss_history": loss_history,
-        "saved_adapters": {
-            "lora_A": f"Weights shape: [{req.r}, 128]",
-            "lora_B": f"Weights shape: [128, {req.r}]"
-        }
-    }
+def api_qlora_train(req: QLoraTrainRequest) -> dict[str, Any]:
+    """A real, tiny LoRA run: a frozen (NF4-quantized) 2-layer network learns a new linear map
+    through rank-``r`` adapters only. Needs ``aicore[train]`` (PyTorch)."""
+    try:
+        import torch
 
-# 19. LLM Eval Harness
+        from aicore.train import LoraFinetuner
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503, detail=f'Training needs PyTorch: pip install "aicore[train]" ({exc})'
+        ) from exc
+
+    torch.manual_seed(0)
+    model = torch.nn.Sequential()
+    model.add_module("fc1", torch.nn.Linear(32, 64))
+    model.add_module("act", torch.nn.ReLU())
+    model.add_module("fc2", torch.nn.Linear(64, 8))
+    x = torch.randn(256, 32)
+    y = x @ torch.randn(32, 8) * 0.5
+    ft = LoraFinetuner(r=req.r, alpha=req.alpha, target_modules=["fc1", "fc2"], dropout=0.0)
+    model = ft.apply(model, quantize_4bit=True)
+    params = [p for _, p in ft.trainable_parameters(model)]
+    opt = torch.optim.Adam(params, lr=1e-2)
+    history = []
+    for epoch in range(1, max(1, min(req.epochs, 200)) + 1):
+        opt.zero_grad()
+        loss = torch.nn.functional.mse_loss(model(x), y)
+        loss.backward()
+        opt.step()
+        history.append({"epoch": epoch, "loss": float(loss.detach())})
+    shapes = {name: list(p.shape) for name, p in ft.trainable_parameters(model)}
+    return {"status": "success", "rank": req.r, "alpha": req.alpha, "loss_history": history, "saved_adapters": shapes}
+
+
 @app.post("/api/eval/benchmark")
-def api_eval_benchmark(req: BenchmarkRequest):
-    if not LLMEvaluator:
-        return {"error": "LLMEvaluator no importado."}
-    cand_tok = LLMEvaluator.clean_and_tokenize(req.candidate)
-    ref_tok = LLMEvaluator.clean_and_tokenize(req.reference)
-    
-    exact = 1.0 if req.candidate.strip() == req.reference.strip() else 0.0
-    jaccard = LLMEvaluator.compute_jaccard(cand_tok, ref_tok)
-    cosine = LLMEvaluator.compute_cosine_similarity(cand_tok, ref_tok)
-    bleu = LLMEvaluator.compute_bleu(cand_tok, ref_tok)
-    
-    ratio = len(cand_tok) / len(ref_tok) if ref_tok else 0.0
-    
-    return {
-        "exact_match": exact,
-        "jaccard_similarity": jaccard,
-        "cosine_similarity": cosine,
-        "bleu_score": bleu,
-        "length_ratio": ratio
-    }
+def api_eval_benchmark(req: BenchmarkRequest) -> dict[str, Any]:
+    return Evaluator().score(req.candidate, req.reference)
 
-# 20. Telemetry Trace
+
 @app.get("/api/telemetry")
-def api_telemetry():
-    return global_tracer.get_trace_tree()
+def api_telemetry() -> list[dict[str, Any]]:
+    return get_hub().tracer.tree()
 
-# 21. UNIFIED PIPELINE SIMULATOR (Concordancia completa de todos los módulos)
-def generate_agent_response(prompt: str, context: str, memories: List[str]) -> str:
-    global global_inference_engine
-    prompt_clean = prompt.strip()
-    
-    # Conversational greetings check
-    greetings = ["hola", "que tal", "buenos dias", "buenos días", "buenas tardes", "buenas noches", "hello", "hi"]
-    is_greeting = any(g in prompt_clean.lower() for g in greetings)
-    
-    if is_greeting:
-        return (
-            "¡Hola! ¿Cómo estás? Soy el asistente virtual del AI Core Infra Hub.\n"
-            "He procesado tu saludo y veo que es una consulta de baja complejidad. "
-            "El enrutador semántico me ha asignado un modelo rápido y económico (como gpt-4o-mini) para responderte.\n"
-            "¿En qué puedo ayudarte hoy en relación a la infraestructura de IA (tokenizadores, chunking, bases vectoriales, agentes o guardrails)?"
-        )
-        
-    def normalize_text(t: str) -> str:
-        accents = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n"}
-        res = t.lower()
-        for a, b in accents.items():
-            res = res.replace(a, b)
-        return res
-        
-    def clean_slide_text(text: str) -> str:
-        lines = text.split("\n")
-        cleaned_lines = []
-        noise_keywords = [
-            "universidad de jaen", 
-            "area de ingenieria telematica", 
-            "dto. ingenieria de telecomunicacion",
-            "dto. ingenieria de computadores",
-            "departamento de",
-            "telematica"
-        ]
-        for line in lines:
-            line_strip = line.strip()
-            if not line_strip:
-                continue
-            if re.match(r'^\d+\.?$', line_strip):
-                continue
-            line_norm = normalize_text(line_strip)
-            if any(nk in line_norm for nk in noise_keywords):
-                continue
-            cleaned_lines.append(line_strip)
-        return "\n".join(cleaned_lines)
-        
-    # Analyze and parse the retrieved context documents
-    import re
-    docs = re.findall(r"Documento \[(.*?)\]:\n(.*?)(?=\n\nDocumento |\n\nRecuerdo de Memoria|$)", context, re.DOTALL)
-    
-    # 1. Intentar inferencia real mediante modelo LLM local (Qwen2.5-0.5B-Instruct) si está disponible
-    if docs and global_inference_engine is not None and getattr(global_inference_engine, "use_local", False):
-        try:
-            # Clean source names
-            doc_ids = []
-            for doc_id, _ in docs:
-                for sep in ["_chunk_", "_sentence_", "_page_"]:
-                    if sep in doc_id:
-                        doc_id = doc_id.split(sep)[0]
-                        break
-                if doc_id not in doc_ids:
-                    doc_ids.append(doc_id)
-            source_display = ", ".join(doc_ids) if doc_ids else "desconocido"
-            
-            # Formateamos el prompt en formato de instrucciones para Qwen-Instruct
-            formatted_prompt = (
-                "<|im_start|>system\n"
-                "Responde la pregunta del usuario en español basándote únicamente en el contexto recuperado de forma detallada y estructurada usando viñetas.\n"
-                "<|im_end|>\n"
-                "<|im_start|>user\n"
-                f"Contexto recuperado:\n{context}\n\n"
-                f"Pregunta: {prompt_clean}\n"
-                "<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            )
-            
-            logger.info("[+] Generando respuesta de RAG real con el modelo local Qwen...")
-            responses = global_inference_engine.generate_batch([formatted_prompt], max_tokens=250)
-            if responses and responses[0].strip():
-                ans = responses[0].strip()
-                ans = ans.split("<|im_end|>")[0].split("<|im_start|>")[0].strip()
-                
-                response = (
-                    f"### 📝 Respuesta del Agente:\n"
-                    f"Basado en el documento **{source_display}** cargado en la base de datos:\n\n"
-                    f"{ans}\n"
-                )
-                return response
-        except Exception as e:
-            logger.error(f"[-] Error en inferencia de LLM local: {e}. Usando fallback de sintesis por reglas...")
-            
-    # 2. Fallback de síntesis estructurada basada en reglas
-    if docs:
-        prompt_normalized = normalize_text(prompt_clean)
-        prompt_words = [w.strip("?,.:;!\"'()").lower() for w in prompt_normalized.split() if len(w) > 2]
-        # Common grammatical particles only
-        stopwords = {"que", "las", "los", "del", "con", "por", "para", "una", "uno", "unos", "unas", "este", "esta", "como", "pero", "donde", "cuando", "quien", "hay", "esta", "estan", "esta", "sobre", "existen", "existan", "existe"}
-        query_keywords = [w for w in prompt_words if w not in stopwords]
-        
-        best_doc_id = None
-        best_doc_text = None
-        max_overlap = -1
-        
-        # 1. Search by keyword overlap
-        if query_keywords:
-            q_stems = set()
-            for kw in query_keywords:
-                q_stems.add(kw)
-                if len(kw) > 4:
-                    q_stems.add(kw[:4])
-                    
-            for doc_id, doc_text in docs:
-                doc_norm = normalize_text(doc_text)
-                doc_words = [w.strip("?,.:;!\"'()[]{}").lower() for w in doc_norm.split() if w.strip()]
-                d_stems = set()
-                for w in doc_words:
-                    d_stems.add(w)
-                    if len(w) > 4:
-                        d_stems.add(w[:4])
-                
-                overlap = len(q_stems.intersection(d_stems))
-                if overlap > max_overlap:
-                    max_overlap = overlap
-                    best_doc_id = doc_id
-                    best_doc_text = doc_text
-                    
-        # 2. Fallback to top-ranked RAG candidate if overlap is zero or empty keywords
-        if (best_doc_text is None or max_overlap <= 0) and docs:
-            best_doc_id = docs[0][0]
-            best_doc_text = docs[0][1]
-            
-        if best_doc_text:
-            cleaned_text = clean_slide_text(best_doc_text)
-            
-            # Correct source name parsing
-            source_display = best_doc_id
-            for sep in ["_chunk_", "_sentence_", "_page_"]:
-                if sep in source_display:
-                    source_display = source_display.split(sep)[0]
-                    break
-                
-            # Smart Explanatory Synthesizer
-            raw_lines = [l.strip() for l in cleaned_text.split("\n") if l.strip()]
-            
-            # Reconstruir lineas cortadas por saltos de linea en las diapositivas
-            lines = []
-            for line in raw_lines:
-                if lines and not (lines[-1].endswith(".") or lines[-1].endswith(":") or lines[-1].endswith(";")):
-                    is_new_item = re.match(r'^([A-Za-z\s_-áéíóúñÁÉÍÓÚÑ\s]+):', line) or line.startswith(("-", "•", "*"))
-                    if not is_new_item:
-                        lines[-1] += " " + line
-                        continue
-                lines.append(line)
-                
-            list_items = []
-            paragraphs = []
-            for line in lines:
-                match = re.match(r'^([A-Za-z\s_-áéíóúñÁÉÍÓÚÑ\s]+):(.*)', line)
-                if match:
-                    list_items.append((match.group(1).strip(), match.group(2).strip()))
-                else:
-                    paragraphs.append(line)
-                    
-            body = ""
-            if list_items:
-                body += "Se identifican los siguientes conceptos y especificaciones clave:\n\n"
-                for key, val in list_items:
-                    key_cap = key.capitalize()
-                    val_clean = val.strip()
-                    if val_clean.startswith(("-", "*", "•")):
-                        val_clean = val_clean[1:].strip()
-                    
-                    if "activo" in key.lower() and not "inactivo" in key.lower():
-                        body += f"*   **{key_cap}**: Estado de operatividad completa donde {val_clean[0].lower()}{val_clean[1:]}\n"
-                    elif "inactivo" in key.lower():
-                        body += f"*   **{key_cap}**: Perfil de ahorro de energía caracterizado por ser un {val_clean[0].lower()}{val_clean[1:]}\n"
-                    elif "consumo" in key.lower() or "ejemplo" in key.lower():
-                        if val_clean:
-                            body += f"*   **{key_cap}**: Demanda del sistema ({val_clean}).\n"
-                        else:
-                            body += f"*   **{key_cap}**:\n"
-                    else:
-                        body += f"*   **{key_cap}**: {val_clean}\n"
-            
-            if paragraphs:
-                if list_items:
-                    body += "\n**Contexto y Detalles Adicionales:**\n"
-                for p in paragraphs:
-                    if p.startswith(("-", "•", "*")):
-                        body += f"*   {p[1:].strip()}\n"
-                    elif ":" in p and len(p.split(":", 1)[0]) < 20:
-                        k, v = p.split(":", 1)
-                        body += f"    *   **{k.strip().capitalize()}**: {v.strip()}\n"
-                    elif len(p) < 40 and not p.endswith("."):
-                        body += f"#### {p}\n"
-                    else:
-                        body += f"{p}\n\n"
-            
-            response = (
-                f"### 📝 Respuesta del Agente:\n"
-                f"Basado en el documento **{source_display}** cargado en la base de datos:\n\n"
-                f"{body.strip()}\n"
-            )
-            return response
-        else:
-            # Fallback to custom keywords check for system infrastructure documentation
-            lower_prompt = prompt_clean.lower()
-            if any(w in lower_prompt for w in ["documento", "meter", "entrenar", "pdf", "procesar", "ingestar"]):
-                return (
-                    "### 💡 Recomendación del Agente:\n"
-                    "Para alimentar nuevos documentos e indexarlos en la infraestructura de IA, debes seguir este flujo de trabajo:\n"
-                    "1. **Extracción y Parseo:** Usa el módulo `multimodal-doc-parser` para convertir PDFs o imágenes a Markdown estructurado utilizando modelos VLM.\n"
-                    "2. **Segmentación:** Fragmenta el texto con el módulo `semantic-chunking-engine` para obtener chunks basados en similitud semántica.\n"
-                    "3. **Entrenamiento y Embeddings:** Pasa los chunks por el codificador de `contrastive-embedding-trainer` para generar sus vectores representativos.\n"
-                    "4. **Almacenamiento e Indexación:** Inserta los vectores en la base de datos `nano-vector-db` configurada con índice HNSW para habilitar búsquedas ultra-rápidas."
-                )
-            elif any(w in lower_prompt for w in ["vector", "hnsw", "db", "almacenar", "base de datos"]):
-                return (
-                    "### 💡 Recomendación del Agente:\n"
-                    "Para interactuar con la base de datos vectorial del proyecto:\n"
-                    "1. Crea una base de datos con `db = NanoVectorDB(dimension=64, index_type='hnsw')`.\n"
-                    "2. Agrega vectores llamando a `db.insert(id=doc_id, vector=vector_float, metadata=meta_dict)`.\n"
-                    "3. Realiza búsquedas aproximadas de vecinos más cercanos (ANN) usando `db.query(vector=query_vector, top_k=3)`."
-                )
-            elif any(w in lower_prompt for w in ["chunk", "semantic", "segmentar", "fragmentar"]):
-                return (
-                    "### 💡 Recomendación del Agente:\n"
-                    "El módulo `semantic-chunking-engine` segmenta textos analizando la distancia coseno entre oraciones adyacentes.\n"
-                    "Configura una instancia con un umbral dinámico (media + threshold * desviación estándar) para agrupar oraciones en párrafos sin romper la coherencia semántica."
-                )
-            elif any(w in lower_prompt for w in ["guardrail", "seguridad", "proteg", "filtra"]):
-                return (
-                    "### 💡 Recomendación del Agente:\n"
-                    "Para proteger tu aplicación:\n"
-                    "1. Instancia el escudo con `shield = LLMGuardrailsShield()`.\n"
-                    "2. Llama a `shield.validate_input(prompt)` para filtrar inyecciones, jailbreaks y anonimizar teléfonos/emails.\n"
-                    "3. Valida las salidas generadas mediante `shield.validate_output(response, context)` para evitar alucinaciones."
-                )
-            else:
-                return (
-                    "### 💡 Recomendación del Agente:\n"
-                    "He recuperado la información relevante sobre este tema del repositorio. "
-                    "Puedes consultar el detalle completo de la implementación revisando los README correspondientes a los módulos citados."
-                )
-    else:
-        return (
-            "No se han encontrado fragmentos específicos relacionados directamente con tu consulta.\n\n"
-            "Por favor, intenta preguntar acerca de conceptos específicos del proyecto como 'NanoVectorDB', 'Semantic Chunker', 'Guardrails', 'ReAct Agents' o 'Embeddings'."
-        )
-        
-    return summary
+
+# --- Documents -------------------------------------------------------------------------------
+
+TEXT_EXTENSIONS = {".txt", ".md", ".json", ".py", ".js", ".csv", ".yaml", ".yml", ".ini"}
+
+
+def slug(text: str) -> str:
+    return re.sub(r"[^\w.-]+", "_", text.strip().lower())
 
 
 @app.post("/api/documents/upload-file")
-async def api_documents_upload_file(file: UploadFile = File(...)):
-    global global_db, global_bm25, global_corpus
-    if global_db is None or global_bm25 is None:
-        init_global_pipeline()
-        
-    filename = file.filename
-    _, ext = os.path.splitext(filename.lower())
-    
-    content_text = ""
-    chunks_list = []
-    try:
-        if ext == ".pdf":
-            import fitz
-            pdf_bytes = await file.read()
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                text = page.get_text().strip()
-                if text:
-                    chunks_list.append(text)
-            doc.close()
-            content_text = f"PDF con {len(chunks_list)} páginas."
-        elif ext in [".txt", ".md", ".json", ".py", ".js", ".csv", ".yaml", ".yml", ".ini"]:
-            file_bytes = await file.read()
-            content_text = file_bytes.decode("utf-8", errors="ignore")
-            chunks_list = [p.strip() for p in content_text.split("\n\n") if p.strip()]
-        else:
-            return {"error": f"Formato de archivo '{ext}' no soportado. Sube un PDF, TXT, MD, etc."}
-    except Exception as e:
-        return {"error": f"Error al leer el archivo: {str(e)}"}
-        
-    if not chunks_list:
+async def api_documents_upload_file(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008 (FastAPI)
+    h = get_hub()
+    filename = Path(file.filename or "upload").name
+    ext = Path(filename).suffix.lower()
+    raw = await file.read()
+    if ext == ".pdf":
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "upload.pdf"
+            path.write_bytes(raw)
+            text = h.parser.parse(path, document_id=filename).text
+    elif ext in TEXT_EXTENSIONS:
+        text = raw.decode("utf-8", errors="ignore")
+    else:
+        return {"error": f"Formato '{ext}' no soportado. Sube un PDF, TXT, MD, etc."}
+    chunks = paragraphs(text)
+    if not chunks:
         return {"error": "El archivo está vacío o no contiene texto extraíble."}
-        
-    provider = MockEmbeddingProvider(dimension=768)
-    title_clean = filename.replace(" ", "_").lower()
-    
-    chunks_to_insert = []
-    for i, chunk_text in enumerate(chunks_list):
-        doc_id = f"file_{title_clean}_chunk_{i}"
-        if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
-            continue
-        chunks_to_insert.append((doc_id, chunk_text))
-        
-    if chunks_to_insert:
-        texts_to_embed = [item[1] for item in chunks_to_insert]
-        all_vecs = provider.get_embeddings(texts_to_embed)
-        for (doc_id, chunk_text), vec in zip(chunks_to_insert, all_vecs):
-            vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
-            global_db.insert(id=doc_id, vector=vec_768, metadata={"source": filename})
-            global_corpus[doc_id] = chunk_text
-        
-    global_bm25.fit(global_corpus)
-    save_global_pipeline_state()
-    
-    return {
-        "status": "success",
-        "filename": filename,
-        "chunks_count": len(chunks_list),
-        "total_chars": len(content_text)
-    }
+    await asyncio.to_thread(h.add_document, f"file_{slug(filename)}", chunks, filename)
+    return {"status": "success", "filename": filename, "chunks_count": len(chunks), "total_chars": len(text)}
+
 
 @app.post("/api/documents/upload")
-def api_documents_upload(req: DocumentUploadRequest):
-    global global_db, global_bm25, global_corpus
-    if global_db is None or global_bm25 is None:
-        init_global_pipeline()
-        
-    title_clean = req.title.strip().replace(" ", "_").lower()
-    content_text = req.content.strip()
-    
-    # 1. Split by double newlines
-    provider = MockEmbeddingProvider(dimension=768)
-    chunks_list = [p.strip() for p in content_text.split("\n\n") if p.strip()]
-    if not chunks_list:
-        chunks_list = [content_text]
-        
-    chunks_to_insert = []
-    for i, chunk_text in enumerate(chunks_list):
-        doc_id = f"uploaded_{title_clean}_chunk_{i}"
-        if doc_id in global_corpus or (hasattr(global_db, "vectors") and doc_id in global_db.vectors):
-            continue
-        chunks_to_insert.append((doc_id, chunk_text))
-        
-    if chunks_to_insert:
-        texts_to_embed = [item[1] for item in chunks_to_insert]
-        all_vecs = provider.get_embeddings(texts_to_embed)
-        for (doc_id, chunk_text), vec in zip(chunks_to_insert, all_vecs):
-            vec_768 = vec[:768] if len(vec) >= 768 else vec + [0.0]*(768-len(vec))
-            global_db.insert(id=doc_id, vector=vec_768, metadata={"source": req.title})
-            global_corpus[doc_id] = chunk_text
-        
-    # 3. Re-fit BM25
-    global_bm25.fit(global_corpus)
-    save_global_pipeline_state()
-    
-    return {"status": "success", "chunks_count": len(chunks_list)}
+def api_documents_upload(req: DocumentUploadRequest) -> dict[str, Any]:
+    chunks = paragraphs(req.content) or [req.content.strip()]
+    get_hub().add_document(f"uploaded_{slug(req.title)}", chunks, req.title)
+    return {"status": "success", "chunks_count": len(chunks)}
 
-@app.get("/api/vector-db/list")
-def api_vector_db_list():
-    global global_db, global_corpus
-    if global_db is None:
-        init_global_pipeline()
-        
-    records = []
-    # If using real NanoVectorDB (with self.vectors and self.metadata)
-    if hasattr(global_db, "vectors") and hasattr(global_db, "metadata"):
-        for doc_id, vec in global_db.vectors.items():
-            meta = global_db.metadata.get(doc_id, {})
-            text = global_corpus.get(doc_id, "Texto no indexado en caché local")
-            # Convert numpy array to list if needed
-            vec_list = vec.tolist() if hasattr(vec, "tolist") else list(vec)
-            records.append({
-                "id": str(doc_id),
-                "metadata": meta,
-                "text": text,
-                "vector_preview": vec_list[:5]
-            })
-    # If using fallback NanoVectorDB (with self.data)
-    elif hasattr(global_db, "data"):
-        for doc_id, item in global_db.data.items():
-            meta = item.get("metadata", {})
-            vec = item.get("vector", [])
-            text = global_corpus.get(doc_id, "Texto no indexado en caché local")
-            records.append({
-                "id": str(doc_id),
-                "metadata": meta,
-                "text": text,
-                "vector_preview": list(vec[:5])
-            })
-            
-    return {"status": "success", "records": records}
+
+# --- The whole pipeline ----------------------------------------------------------------------
+
+
+def source_name(chunk_id: str) -> str:
+    return re.split(r"_chunk_|#", chunk_id)[0].removeprefix("file_").removeprefix("uploaded_")
+
 
 @app.post("/api/pipeline/run")
-async def api_pipeline_run(req: UnifiedPipelineRequest):
-    global global_shield, global_db, global_bm25, global_memory, global_router, global_runtime, global_reranker, global_corpus
-    if global_shield is None:
-        init_global_pipeline()
-    global_tracer.clear()
-    
-    # 1. Iniciar traza global
-    global_tracer.start_span("AI Core Infra - Unified Pipeline Run", inputs={"prompt": req.prompt})
-    
-    # Paso 1: Interceptor Guardrails de Entrada (Shield real)
-    global_tracer.start_span("1. Guardrails Input Scan (llm-guardrails-shield)")
-    safe, clean, reason = global_shield.validate_input(req.prompt)
-    global_tracer.end_span(outputs={"is_safe": safe, "cleaned_prompt": clean})
-    
-    if not safe:
-        global_tracer.end_span(error=Exception(f"Prompt bloqueado: {reason}"))
-        return {"status": "blocked", "reason": reason, "telemetry": global_tracer.get_trace_tree()}
-        
-    # Paso 2: Router Semántico (Router real)
-    global_tracer.start_span("2. Complex Model Routing (semantic-model-router)")
-    decision = global_router.route(clean)
-    model = decision.selected_model
-    cost = decision.estimated_cost_per_1k_tokens
-    global_tracer.end_span(outputs={"selected_model": model, "complexity": decision.complexity_category})
-    
-    # Paso 3: Embedding Generator (Contrastive Transformer de 768 dimensiones)
-    global_tracer.start_span("3. Text Embedding Encoder (contrastive-embedding-trainer)")
-    provider = MockEmbeddingProvider(dimension=768)
-    q_vec = provider.get_embeddings([clean])[0]
-    q_vec_768 = q_vec[:768] if len(q_vec) >= 768 else q_vec + [0.0]*(768-len(q_vec))
-    global_tracer.end_span(outputs={"vector_dimensions": len(q_vec_768)})
-    
-    # Paso 4: Búsqueda Híbrida (Pipeline real sobre PROJECTS.md)
-    global_tracer.start_span("4. Hybrid Retrieval Search (hybrid-search-retrieval-pipeline)")
-    
-    # 4.1. Sparse Retrieval (BM25 real)
-    sparse_res = global_bm25.retrieve(clean, top_k=15)
-    
-    # 4.2. Dense Retrieval (HNSW NanoVectorDB real)
-    dense_raw = global_db.query(vector=q_vec_768, top_k=15)
-    dense_res = [(r["distance"], r["id"]) for r in dense_raw]
-    
-    # 4.3. Fusion (Score Fusion real)
-    fused_results = score_normalization_fusion(dense_res, sparse_res, alpha=0.5, metric="cosine")
-    
-    candidates = []
-    for score, doc_id in fused_results:
-        content = global_corpus.get(doc_id, "Documento de la infraestructura de IA")
-        doc_id_str = str(doc_id)
-        source_name = doc_id_str
-        for sep in ["_chunk_", "_sentence_", "_page_"]:
-            if sep in doc_id_str:
-                source_name = doc_id_str.split(sep)[0]
-                break
-        source_clean = source_name.replace("file_", "").replace(".pdf", "").replace(".txt", "").replace(".md", "").replace("-", " ").replace("_", " ")
-        augmented_content = f"Documento {source_clean}:\n{content}"
-        candidates.append({"id": doc_id, "text": augmented_content, "score": score})
-        
-    global_tracer.end_span(outputs={"candidates_retrieved": len(candidates)})
-    
-    # Paso 5: Reordenamiento Cross-Encoder (Reranker real)
-    global_tracer.start_span("5. Cross-Encoder Reranking (cross-encoder-reranker)")
-    reranked = global_reranker.rerank(clean, candidates, top_k=2)
-    global_tracer.end_span(outputs={"reranked_candidates": [{"id": r["id"], "score": r["rerank_score"]} for r in reranked]})
-    
-    # Paso 6: Memory Recall (Episodic Memory real)
-    global_tracer.start_span("6. Episodic Memory Recall (agentic-memory-layer)")
-    recalled_facts = global_memory.recall(clean, top_k=2)
-    global_tracer.end_span(outputs={"recalled_facts": [f["fact"] for f in recalled_facts]})
-    
-    # Paso 7: Orchestra Agents ReAct Execution (Agente real)
-    global_tracer.start_span("7. Agent ReAct Reasoning (orchestra-agents)")
-    
-    # Unificamos el contexto recuperado
-    context_blocks = []
-    for r in reranked:
-        context_blocks.append(f"Documento [{r['id']}]:\n{r['text']}")
-    for m in recalled_facts:
-        context_blocks.append(f"Recuerdo de Memoria:\n{m['fact']}")
-    context_str = "\n\n".join(context_blocks)
-    
-    # 7.1. Sandbox Safe Execution (Secure tool runtime real)
-    global_tracer.start_span("7.1. Sandbox Safe Execution (secure-tool-runtime)")
-    test_code = "def check_env():\n    return 'Entorno Sandbox Seguro Verificado'\nprint(check_env())"
-    success, stdout, stderr, err = global_runtime.run_code(test_code, timeout_seconds=1.5)
-    global_tracer.end_span(outputs={"success": success, "stdout": stdout.strip()})
-    
-    # Generamos la respuesta integrada
-    agent_output = generate_agent_response(clean, context_str, [f["fact"] for f in recalled_facts])
-    global_tracer.end_span(outputs={"agent_response": agent_output})
-    
-    # Paso 8: Guardrail de Salida (Shield real)
-    global_tracer.start_span("8. Guardrails Output Scan (llm-guardrails-shield)")
-    out_safe, clean_out, out_reason = global_shield.validate_output(agent_output, context_str)
-    global_tracer.end_span(outputs={"is_safe": out_safe, "clean_response": clean_out})
-    
-    # Cierre de Span Raíz
-    global_tracer.end_span()
-    
-    if not out_safe:
-        return {
-            "status": "blocked",
-            "reason": out_reason,
-            "telemetry": global_tracer.get_trace_tree()
-        }
-        
+def api_pipeline_run(req: UnifiedPipelineRequest) -> dict[str, Any]:
+    h = get_hub()
+    tr = h.tracer
+    tr.clear()
+    with tr.span("AI Core pipeline", inputs={"prompt": req.prompt}) as root:
+        with tr.span("1. Input guardrails (llm-guardrails-shield)") as out:
+            verdict = h.guard.check_input(req.prompt)
+            out.update(allowed=verdict.allowed, category=verdict.category)
+        if not verdict.allowed:
+            root["blocked"] = verdict.reason
+            return {"status": "blocked", "reason": verdict.reason, "telemetry": tr.tree()}
+        prompt = verdict.text
+
+        with tr.span("2. Model routing (semantic-model-router)") as out:
+            decision = h.router.route(prompt)
+            out.update(model=decision.label, path=decision.path)
+
+        with tr.span("3. Hybrid retrieval + rerank (hybrid-search, nano-vector-db, cross-encoder)") as out:
+            hits = h.rag.retrieve(prompt, k=3)
+            out["hits"] = [{"id": x.id, "score": round(x.score, 4)} for x in hits]
+
+        with tr.span("4. Memory recall (agentic-memory-layer)") as out:
+            memories = h.memory.recall(prompt, k=2)
+            out["facts"] = [m.text for m in memories]
+
+        with tr.span("5. Answer generation") as out:
+            if h.generator is not None:
+                answer = h.rag.answer(prompt, k=3).text
+                out["backend"] = h.generator.model
+            else:
+                answer = h.rag.extractive_answer(prompt, hits)
+                out["backend"] = "extractive"
+            sources = sorted({source_name(x.id) for x in hits})
+            response = f"{answer}\n\nFuentes: {', '.join(sources)}" if answer else "No he encontrado nada relacionado."
+
+        with tr.span("6. Output guardrails (llm-guardrails-shield)") as out:
+            context = "\n\n".join(x.text for x in hits)
+            checked = h.guard.check_output(response, context)
+            out.update(allowed=checked.allowed, category=checked.category)
+
+    if not checked.allowed:
+        return {"status": "blocked", "reason": checked.reason, "telemetry": tr.tree()}
     return {
         "status": "success",
-        "model": model,
-        "cost": cost,
-        "response": clean_out,
-        "telemetry": global_tracer.get_trace_tree()
+        "model": decision.label if h.generator is None else h.generator.model,
+        "cost": decision.estimated_cost_per_1k_tokens,
+        "response": checked.text,
+        "sources": [{"id": x.id, "score": x.score, "source": x.metadata.get("source")} for x in hits],
+        "memories": [m.text for m in memories],
+        "telemetry": tr.tree(),
     }
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+    uvicorn.run("main:app", host="127.0.0.1", port=8000)

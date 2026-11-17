@@ -11,9 +11,7 @@ def check_dependencies():
     try:
         import fastapi
         import uvicorn
-        import sse_starlette
-        import numpy
-        import pydantic
+        import aicore  # noqa: F401  (the SDK, with every component)
         print("[+] All essential dependencies are available.")
     except ImportError as e:
         print(f"[-] Missing dependency: {e.name}")
@@ -32,7 +30,7 @@ def main():
     print("      AI CORE INFRA SHOWCASE HUB LAUNCHER")
     print("="*60)
     print("[-] Server starting at: http://127.0.0.1:8000")
-    print("[-] Open this link in your browser to interact with all 21 projects.")
+    print("[-] Open this link in your browser to drive the 20 components through the aicore SDK.")
     print("="*60 + "\n")
     
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
