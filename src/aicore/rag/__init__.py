@@ -213,7 +213,8 @@ class HybridRetriever:
         rows = self._pipeline.bm25.retrieve(query, top_k=k)
         meta = self.index.db.metadata
         return [
-            Hit(str(i), self._corpus.get(str(i), ""), float(s), dict(meta.get(i, {})), {"bm25": float(s)}) for s, i in rows
+            Hit(str(i), self._corpus.get(str(i), ""), float(s), dict(meta.get(i, {})), {"bm25": float(s)})
+            for s, i in rows
         ]
 
     def dense_search(self, query: str, k: int = 5) -> list[Hit]:

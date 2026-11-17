@@ -56,6 +56,8 @@ PUBLIC = {
         "Evaluator",
         "InferenceClient",
         "RAGBenchmark",
+        "RoundReport",
+        "RouterImprovementLoop",
         "SyntheticData",
         "Tracer",
         "annotation_app",

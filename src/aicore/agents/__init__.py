@@ -16,7 +16,7 @@ from ..adapters import agents as adapt
 from ..embeddings import Embedder
 from ..types import GuardVerdict, MemoryHit, RouteDecision, ToolResult
 
-__all__ = ["Guard", "Memory", "Orchestrator", "Router", "ToolRuntime"]
+__all__ = ["Guard", "IntentRouter", "Memory", "Orchestrator", "Router", "ToolRuntime"]
 
 AREA = "agents"
 
@@ -122,6 +122,54 @@ class Router:
 
     def route(self, prompt: str) -> RouteDecision:
         return adapt.route_from_router(self._router.route(prompt))
+
+
+class IntentRouter:
+    """semantic-model-router's learned intent classifier, served from a champion/challenger
+    registry (``registry_dir``) or from a single saved model (``model_dir``).
+
+    ``route(text, context)`` returns the champion's label, its probability as ``confidence`` and
+    ``path="champion:<version>"``. With ``shadow=<version>`` a challenger also runs on every
+    message and :attr:`shadow_agreement` tells how often it agrees.
+    """
+
+    def __init__(
+        self,
+        registry_dir: str | os.PathLike[str] | None = None,
+        model_dir: str | os.PathLike[str] | None = None,
+        shadow: str | None = None,
+    ) -> None:
+        reg = component(AREA, "semantic_model_router.registry")
+        from ..adapters.ops import register_router_kinds
+
+        register_router_kinds()
+        if (registry_dir is None) == (model_dir is None):
+            raise ValueError("give exactly one of registry_dir or model_dir")
+        self._cc = None
+        if registry_dir is not None:
+            self._cc = reg.ChampionChallengerRouter(reg.ModelRegistry(str(registry_dir)), challenger=shadow)
+            self.version = str(self._cc.champion_version)
+            self._model = self._cc.model
+        else:
+            self._model = reg.load_model(str(model_dir))
+            self.version = os.path.basename(str(model_dir).rstrip("/"))
+        self.labels: list[str] = list(self._model.labels)
+
+    def route(self, text: str, context: Sequence[str] | None = None) -> RouteDecision:
+        start = time.perf_counter()
+        if self._cc is not None:
+            out = self._cc.route(text, list(context or []))
+            label, confidence = str(out["label"]), float(out["confidence"])
+        else:
+            p = self._model.predict_proba([text], [list(context or [])])[0]
+            best = max(range(len(self.labels)), key=lambda i: p[i])
+            label, confidence = self.labels[best], float(p[best])
+        ms = (time.perf_counter() - start) * 1000
+        return RouteDecision(label=label, reason=f"{ms:.2f} ms", confidence=confidence, path=f"champion:{self.version}")
+
+    @property
+    def shadow_agreement(self) -> float | None:
+        return None if self._cc is None else self._cc.shadow_agreement
 
 
 class Guard:

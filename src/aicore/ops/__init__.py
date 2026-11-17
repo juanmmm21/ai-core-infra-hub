@@ -16,6 +16,7 @@ from .._deps import component
 from ..errors import InferenceError, MissingExtraError
 from ..types import Generation
 from .rag_eval import BenchmarkResult, RAGBenchmark, load_examples, load_hotpotqa
+from .router_loop import RoundReport, RouterImprovementLoop
 
 __all__ = [
     "BenchmarkResult",
@@ -23,6 +24,8 @@ __all__ = [
     "Evaluator",
     "InferenceClient",
     "RAGBenchmark",
+    "RoundReport",
+    "RouterImprovementLoop",
     "SyntheticData",
     "Tracer",
     "annotation_app",
