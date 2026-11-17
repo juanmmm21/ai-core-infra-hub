@@ -137,3 +137,14 @@ def test_graph_extractor_offline_returns_triples() -> None:
     assert isinstance(triples, list)
     for t in triples:
         assert t.subject and t.relation and t.object
+
+
+def test_empty_collaborators_passed_in_are_kept() -> None:
+    """An empty retriever or index is falsy (it has __len__): it must still be the one used."""
+    index = VectorIndex(64, index_type="flat")
+    retriever = HybridRetriever(HashEmbedder(64), index=index)
+    assert retriever.index is index
+    rag = RAGPipeline(retriever=retriever)
+    assert rag.retriever is retriever
+    retriever.add([Chunk("a", "a", "late addition about volcanoes", 0)])
+    assert rag.retrieve("volcanoes", k=1)[0].id == "a"

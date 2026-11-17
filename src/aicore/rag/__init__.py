@@ -83,7 +83,7 @@ class Chunker:
         max_tokens: int = 512,
     ) -> None:
         mod = component(AREA, "semantic_chunking_engine")
-        self.embedder = embedder or HashEmbedder()
+        self.embedder = embedder if embedder is not None else HashEmbedder()
         self._chunker = mod.SemanticChunker(
             embedding_provider=adapt.EmbeddingProviderAdapter(self.embedder),
             tokenizer=tokenizer,
@@ -166,8 +166,8 @@ class HybridRetriever:
         index_type: Literal["hnsw", "flat"] = "flat",
     ) -> None:
         mod = component(AREA, "hybrid_search_retrieval_pipeline")
-        self.embedder = embedder or HashEmbedder()
-        self.index = index or VectorIndex(self.embedder.dimension, index_type=index_type)
+        self.embedder = embedder if embedder is not None else HashEmbedder()
+        self.index = index if index is not None else VectorIndex(self.embedder.dimension, index_type=index_type)
         self._mod = mod
         self._corpus: dict[str, str] = dict(self.index.texts)
         self._pipeline = mod.HybridSearchPipeline(
@@ -295,8 +295,8 @@ class RAGPipeline:
         prompt: str = DEFAULT_PROMPT,
         candidates: int = 15,
     ) -> None:
-        self.embedder = embedder or HashEmbedder()
-        self.retriever = retriever or HybridRetriever(self.embedder)
+        self.embedder = embedder if embedder is not None else HashEmbedder()
+        self.retriever = retriever if retriever is not None else HybridRetriever(self.embedder)
         self.chunker = chunker
         self.reranker = reranker
         self.generator = generator
@@ -327,18 +327,19 @@ class RAGPipeline:
     def answer(self, question: str, k: int = 5, max_tokens: int = 64) -> Answer:
         hits = self.retrieve(question, k)
         if self.generator is None:
-            return Answer(self._extractive(question, hits), tuple(hits), "extractive")
+            return Answer(self.extractive_answer(question, hits), tuple(hits), "extractive")
         text = self.generator.complete(self.build_prompt(question, hits), max_tokens=max_tokens, temperature=0.0)
         return Answer(text.strip(), tuple(hits), getattr(self.generator, "model", ""))
 
-    def _extractive(self, question: str, hits: Sequence[Hit]) -> str:
-        """No generator: the retrieved sentence that shares most words with the question."""
-        words = set(re.findall(r"\w+", question.lower()))
-        best, best_score = "", -1.0
+    def extractive_answer(self, question: str, hits: Sequence[Hit]) -> str:
+        """No generator: the retrieved sentence that best covers the question's content words
+        (words of three letters or more), preferring higher-ranked hits."""
+        words = {w for w in re.findall(r"\w+", question.lower()) if len(w) > 2}
+        best, best_score = "", 0.0
         for rank, hit in enumerate(hits):
             for sentence in _SENTENCE.split(hit.text):
                 overlap = len(words & set(re.findall(r"\w+", sentence.lower())))
-                score = overlap - 0.01 * rank
-                if overlap and score > best_score:
+                score = overlap / (1.0 + 0.25 * rank)
+                if score > best_score:
                     best, best_score = sentence.strip(), score
         return best or (hits[0].text if hits else "")
