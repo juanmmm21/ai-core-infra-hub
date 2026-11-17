@@ -70,13 +70,28 @@ class Memory:
         """Store a fact; returns its id (same ``id`` replaces the previous fact)."""
         return str(self._mem.save_fact(text, importance, dict(metadata or {}), id, created_at))
 
-    def remember_many(self, items: Sequence[tuple[str, str, Mapping[str, Any]]], importance: float = 5.0) -> int:
-        """Bulk ``(id, text, metadata)`` insert, embedded in one batch and saved once."""
-        vectors = self.embedder.embed([t for _, t, _ in items]) if self.embedder else [None] * len(items)
+    def remember_many(
+        self,
+        items: Sequence[tuple[str, str, Mapping[str, Any]]],
+        importance: float | Sequence[float] = 5.0,
+        created_at: Sequence[float | None] | None = None,
+        batch_size: int = 64,
+    ) -> int:
+        """Bulk ``(id, text, metadata)`` insert: embedded in batches, saved once. ``importance``
+        and ``created_at`` may be given per item (same order as ``items``)."""
+        n = len(items)
+        imps = [float(importance)] * n if isinstance(importance, (int, float)) else [float(i) for i in importance]
+        dates = list(created_at) if created_at is not None else [None] * n
+        if len(imps) != n or len(dates) != n:
+            raise ValueError("importance and created_at must have one value per item")
+        vectors: list[Any] = []
+        for start in range(0, n, batch_size):
+            chunk = [t for _, t, _ in items[start : start + batch_size]]
+            vectors.extend(self.embedder.embed(chunk) if self.embedder else [None] * len(chunk))
         with self._mem.batch():
-            for (fid, text, meta), vec in zip(items, vectors, strict=True):
-                self._mem.save_fact(text, importance, dict(meta), fid, None, vec)
-        return len(items)
+            for (fid, text, meta), vec, imp, when in zip(items, vectors, imps, dates, strict=True):
+                self._mem.save_fact(text, imp, dict(meta), fid, when, vec)
+        return n
 
     def recall(
         self,

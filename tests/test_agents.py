@@ -36,6 +36,17 @@ def test_memory_persists_and_bulk_inserts(tmp_path: Path) -> None:
     assert again.recall("nota numero 7", k=1, where={"i": 7})[0].id == "n7"
 
 
+def test_memory_bulk_per_item_importance_and_dates() -> None:
+    memory = Memory(embedder=HashEmbedder(64), half_life_days=1.0)
+    memory.remember_many(
+        [("a", "nota antigua", {}), ("b", "nota nueva", {})], importance=[2.0, 9.0], created_at=[0.0, 86400.0]
+    )
+    hits = {h.id: h for h in memory.recall("nota", k=2, now=86400.0)}
+    assert hits["a"].importance == 2.0 and hits["a"].created_at == 0.0 and hits["b"].importance == 9.0
+    with pytest.raises(ValueError):
+        memory.remember_many([("c", "x", {})], importance=[1.0, 2.0])
+
+
 def test_memory_on_vector_index() -> None:
     memory = Memory(embedder=HashEmbedder(64), use_vector_index=True)
     keep = memory.remember("el perro se llama Toby")
