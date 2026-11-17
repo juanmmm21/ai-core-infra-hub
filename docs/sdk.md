@@ -96,16 +96,31 @@ fid = memory.remember("Prefers answers in Spanish", importance=8, metadata={"sou
 memory.recall("language preference", k=3, where={"source": "chat"})
 memory.forget(fid)
 
-verdict = Guard().check_input(user_text)      # GuardVerdict(allowed, text, reason, category)
-decision = Router().route(user_text)          # RouteDecision(label, reason, confidence, path)
+verdict = Guard(injection_detector="rules").check_input(user_text)   # GuardVerdict(allowed, text, reason, category)
+decision = Router().route(user_text)          # complexity routing to model profiles
+intent = IntentRouter(registry_dir="registry").route("sigue", ["active_project"])  # learned intent, champion model
 ToolRuntime().run("print(2 + 2)")             # ToolResult(ok, stdout, stderr, error, duration_s)
 ```
+
+`Memory.remember_many(items, importance=[...], created_at=[...])` bulk-inserts with per-item
+importance and dates, embedded in batches. `Guard` takes `injection_detector` (`rules`,
+`classifier`, `hybrid`) and `block_destructive`. `IntentRouter` serves the champion of a
+semantic-model-router registry (optionally shadowing a challenger).
 
 ### Ops (`aicore.ops`)
 
 `InferenceClient` (any OpenAI-compatible server: `chat`, `complete`, `stream`, `models`),
-`Tracer` (`with tracer.span(name, inputs) as outputs:`), `Evaluator`, `SyntheticData`,
-`DatasetRepo`, `annotation_app(tokenizer)`.
+`Tracer` (`with tracer.span(name, inputs) as outputs:`; `Tracer(otlp_endpoint=...)` exports to
+OpenTelemetry with the GenAI conventions; `record(name, start, end, parent, **metadata)` adds
+spans measured elsewhere), `Evaluator`, `SyntheticData`, `DatasetRepo`, `annotation_app(tokenizer)`.
+
+Evaluation and improvement loops:
+
+* `RAGBenchmark(examples, k).run(name, factory)` — a `RAGPipeline` on HotpotQA with an open
+  corpus, scored by llm-eval-harness (`load_hotpotqa`, `load_examples`).
+* `RouterImprovementLoop(spec, workdir).run(round, n_per_label, seed, candidates, ...)` —
+  synthetic data → dataset versions → training (hashed or LoRA/QLoRA) → harness evaluation →
+  champion/challenger promotion. See `pipelines/README.md`.
 
 ### Train (`aicore.train`)
 
