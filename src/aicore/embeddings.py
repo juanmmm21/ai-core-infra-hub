@@ -31,6 +31,16 @@ class Embedder(Protocol):
     def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
+def query_vector(embedder: Embedder, text: str) -> list[float]:
+    """The vector of a question. Asymmetric models (qwen3-embedding, e5, bge…) encode questions
+    with an instruction: an embedder that defines ``embed_query(text)`` gets it used here;
+    any other embeds the question like a document."""
+    embed_query = getattr(embedder, "embed_query", None)
+    if callable(embed_query):
+        return list(embed_query(text))
+    return embedder.embed([text])[0]
+
+
 def _strip_accents(text: str) -> str:
     import unicodedata
 

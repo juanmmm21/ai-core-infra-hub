@@ -17,7 +17,7 @@ from typing import Any, Literal, Protocol
 
 from .._deps import component
 from ..adapters import rag as adapt
-from ..embeddings import Embedder, HashEmbedder
+from ..embeddings import Embedder, HashEmbedder, query_vector
 from ..types import Answer, Chunk, Document, Hit, Triple
 
 __all__ = [
@@ -171,7 +171,7 @@ class HybridRetriever:
         self._mod = mod
         self._corpus: dict[str, str] = dict(self.index.texts)
         self._pipeline = mod.HybridSearchPipeline(
-            vector_db=self.index.db, embed_fn=lambda q: self.embedder.embed([q])[0]
+            vector_db=self.index.db, embed_fn=lambda q: query_vector(self.embedder, q)
         )
         self._dirty = bool(self._corpus)
         self._lock = threading.Lock()
@@ -219,7 +219,7 @@ class HybridRetriever:
 
     def dense_search(self, query: str, k: int = 5) -> list[Hit]:
         """Vectors alone."""
-        return self.index.search(self.embedder.embed([query])[0], k)
+        return self.index.search(query_vector(self.embedder, query), k)
 
 
 class Reranker:

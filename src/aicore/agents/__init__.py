@@ -13,7 +13,7 @@ from typing import Any
 
 from .._deps import component
 from ..adapters import agents as adapt
-from ..embeddings import Embedder
+from ..embeddings import Embedder, query_vector
 from ..types import GuardVerdict, MemoryHit, RouteDecision, ToolResult
 
 __all__ = ["Guard", "IntentRouter", "Memory", "Orchestrator", "Router", "ToolRuntime"]
@@ -46,7 +46,8 @@ class Memory:
             nvdb = component("rag", "nano_vector_db")
             store = nvdb.NanoVectorDB(dimension=embedder.dimension, metric="cosine", index_type="hnsw")
         self.embedder = embedder
-        embed_fn: Callable[[str], Sequence[float]] | None = (lambda t: embedder.embed([t])[0]) if embedder else None
+        # The component encodes questions with embed_fn; documents are always embedded here.
+        embed_fn: Callable[[str], Sequence[float]] | None = (lambda t: query_vector(embedder, t)) if embedder else None
         self._mem = mod.AgenticMemory(
             short_term_max_turns=short_term_turns,
             vector_store=store,
@@ -68,7 +69,8 @@ class Memory:
         created_at: float | None = None,
     ) -> str:
         """Store a fact; returns its id (same ``id`` replaces the previous fact)."""
-        return str(self._mem.save_fact(text, importance, dict(metadata or {}), id, created_at))
+        vector = self.embedder.embed([text])[0] if self.embedder else None
+        return str(self._mem.save_fact(text, importance, dict(metadata or {}), id, created_at, vector))
 
     def remember_many(
         self,

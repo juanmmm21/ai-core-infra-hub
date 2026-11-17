@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from aicore import HashEmbedder
 from aicore.agents import Guard, Memory, Orchestrator, Router, ToolRuntime
+from aicore.embeddings import query_vector
 
 
 def test_memory_remember_recall_forget_with_embedder() -> None:
@@ -104,3 +106,40 @@ def test_orchestrator_plans_and_runs() -> None:
     orch.add_agent("WriterAgent", "Redactor", "Escribe informes")
     assert orch.plan("Investiga el mercado y escribe un informe")
     assert isinstance(orch.run("Investiga el mercado y escribe un informe"), str)
+
+
+class _AsymmetricEmbedder:
+    """Questions and documents encoded differently, like qwen3-embedding with its instruction."""
+
+    def __init__(self) -> None:
+        self.inner = HashEmbedder(64)
+        self.queries: list[str] = []
+        self.documents: list[str] = []
+
+    @property
+    def dimension(self) -> int:
+        return self.inner.dimension
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.documents.extend(texts)
+        return self.inner.embed(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return self.inner.embed([text])[0]
+
+
+def test_memory_encodes_questions_with_embed_query() -> None:
+    emb = _AsymmetricEmbedder()
+    memory = Memory(embedder=emb)
+    memory.remember("Prefers answers in Spanish", id="a")
+    memory.remember_many([("b", "Drinks coffee without sugar", {})])
+    hits = memory.recall("coffee", k=1)
+    assert hits[0].id == "b"
+    assert emb.queries == ["coffee"]
+    assert emb.documents == ["Prefers answers in Spanish", "Drinks coffee without sugar"]
+
+
+def test_query_vector_falls_back_to_embed() -> None:
+    emb = HashEmbedder(32)
+    assert query_vector(emb, "hola") == emb.embed(["hola"])[0]

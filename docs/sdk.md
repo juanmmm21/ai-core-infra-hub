@@ -63,6 +63,11 @@ tokenizer. One `Embedder` is shared by every area.
 | `SentenceTransformerEmbedder(model)` | a sentence-transformers model | `sentence-transformers` |
 | `OllamaEmbedder(model, base_url)` | Ollama's `/api/embed` | none (standard library HTTP) |
 
+Any object with `dimension` and `embed(texts)` is an `Embedder`. Asymmetric models (qwen3-embedding,
+e5, bge…) encode questions with an instruction: an embedder that also defines
+`embed_query(text) -> list[float]` gets it used for every question (`Memory.recall`, the
+retrievers), while documents always go through `embed`.
+
 ### RAG (`aicore.rag`)
 
 ```python
