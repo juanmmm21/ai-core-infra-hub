@@ -128,13 +128,46 @@ class InferenceClient:
 class Tracer:
     """llm-observability-tracer: nested spans with inputs, outputs, errors and timings.
 
-    ``with tracer.span("retrieve", inputs={...}) as span: ...``; the tree is available from
-    :meth:`tree` and can be rendered as an HTML flame graph.
+    ``with tracer.span("retrieve", inputs={...}) as outputs: ...``; the tree is available from
+    :meth:`tree` and can be rendered as an HTML flame graph. With ``otlp_endpoint`` every span is
+    also exported to OpenTelemetry (GenAI semantic conventions; prompts and completions only with
+    ``capture_content=True``). :meth:`record` adds spans measured elsewhere, with their own times.
     """
 
-    def __init__(self, tracer: Any = None) -> None:
+    def __init__(
+        self,
+        tracer: Any = None,
+        otlp_endpoint: str | None = None,
+        service_name: str = "ai-core",
+        capture_content: bool = False,
+    ) -> None:
         mod = component(AREA, "llm_observability_tracer")
         self._tracer = tracer if tracer is not None else mod.GlobalTracer()
+        if otlp_endpoint:
+            self._tracer.enable_otel(endpoint=otlp_endpoint, service_name=service_name, capture_content=capture_content)
+
+    def record(
+        self,
+        name: str,
+        start: float,
+        end: float,
+        parent: Any = None,
+        error: str | None = None,
+        **metadata: Any,
+    ) -> Any:
+        """A finished span from ``start`` to ``end`` (epoch seconds) under ``parent`` (the value
+        a previous ``record`` returned). Metadata keys follow the tracer's GenAI mapping
+        (``operation``, ``provider``, ``model``, ``input_tokens``...)."""
+        return self._tracer.record_span(name, start, end, metadata, parent, error)
+
+    def forget(self, root: Any) -> None:
+        """Drop a recorded tree once exported (long-running processes)."""
+        self._tracer.record_tree([root])
+
+    def flush(self) -> None:
+        otel = getattr(self._tracer, "otel", None)
+        if otel is not None:
+            otel.flush()
 
     @property
     def native(self) -> Any:

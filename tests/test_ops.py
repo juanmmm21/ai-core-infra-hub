@@ -62,6 +62,24 @@ def test_tracer_nested_spans_and_errors() -> None:
     assert "boom" in str(tree[1]["error"])
 
 
+def test_tracer_records_spans_with_times_and_exports(tmp_path: Path) -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = Tracer()
+    tracer.native.otel = __import__("llm_observability_tracer").OTelBridge(tracer_provider=provider)
+    root = tracer.record("turn", 10.0, 12.0, origin="telegram")
+    tracer.record("llm", 10.5, 11.9, parent=root, operation="chat", provider="ollama", model="m")
+    names = sorted(s.name for s in exporter.get_finished_spans())
+    assert names == ["chat m", "turn"]
+    tracer.forget(root)
+    assert tracer.tree() == []
+
+
 def test_tracer_flamegraph(tmp_path: Path) -> None:
     tracer = Tracer()
     tracer.clear()
