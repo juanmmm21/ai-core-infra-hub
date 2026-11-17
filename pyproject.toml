@@ -18,37 +18,38 @@ dependencies = ["numpy>=1.20"]
 # as nanosql does with the strata engines. They never import each other: this SDK is the only
 # place where their types meet, through `aicore.adapters`.
 #
-# While the roadmap is in progress every reference points at the `feat/ai-core-roadmap`
-# branches. Merge order: components -> tags vX.Y.Z -> these references pinned to the tags.
+# Every reference is pinned: to a component tag (vX.Y.Z) or, until that tag is pushed, to the exact
+# commit of the component's main that the tag marks. A component change ships as: its minor
+# version -> main -> tag -> the pin here -> a new aicore version and tag.
 [project.optional-dependencies]
 rag = [
-    "bpe-tokenizer-from-scratch @ git+https://github.com/juanmmm21/bpe-tokenizer-from-scratch.git@feat/ai-core-roadmap",
-    "semantic-chunking-engine @ git+https://github.com/juanmmm21/semantic-chunking-engine.git@feat/ai-core-roadmap",
-    "multimodal-doc-parser @ git+https://github.com/juanmmm21/multimodal-doc-parser.git@feat/ai-core-roadmap",
+    "bpe-tokenizer-from-scratch @ git+https://github.com/juanmmm21/bpe-tokenizer-from-scratch.git@ec938d0a4db6f6eac4f20efa8417d51a609b00cd",
+    "semantic-chunking-engine @ git+https://github.com/juanmmm21/semantic-chunking-engine.git@981554254f2142cdcdbb931c1b7032c801880b48",
+    "multimodal-doc-parser @ git+https://github.com/juanmmm21/multimodal-doc-parser.git@e78264a0f4552616729d6934d7b1512db5404545",
     "nano-vector-db @ git+https://github.com/juanmmm21/nano-vector-db.git@v0.1.0",
-    "knowledge-graph-extractor @ git+https://github.com/juanmmm21/knowledge-graph-extractor.git@feat/ai-core-roadmap",
-    "hybrid-search-retrieval-pipeline @ git+https://github.com/juanmmm21/hybrid-search-retrieval-pipeline.git@feat/ai-core-roadmap",
-    "cross-encoder-reranker @ git+https://github.com/juanmmm21/cross-encoder-reranker.git@feat/ai-core-roadmap",
+    "knowledge-graph-extractor @ git+https://github.com/juanmmm21/knowledge-graph-extractor.git@5142141f201f430114939f8a250b81187800aed1",
+    "hybrid-search-retrieval-pipeline @ git+https://github.com/juanmmm21/hybrid-search-retrieval-pipeline.git@3c93049efbbee7e211ad3f5a93d045e4aa3b8fbd",
+    "cross-encoder-reranker @ git+https://github.com/juanmmm21/cross-encoder-reranker.git@36b2e5dfc15a5fde71ce0190005e326dbc90e638",
 ]
 agents = [
-    "semantic-model-router @ git+https://github.com/juanmmm21/semantic-model-router.git@feat/ai-core-roadmap",
-    "llm-guardrails-shield @ git+https://github.com/juanmmm21/llm-guardrails-shield.git@feat/ai-core-roadmap",
-    "orchestra-agents @ git+https://github.com/juanmmm21/orchestra-agents.git@feat/ai-core-roadmap",
-    "agentic-memory-layer @ git+https://github.com/juanmmm21/agentic-memory-layer.git@feat/ai-core-roadmap",
-    "secure-tool-runtime @ git+https://github.com/juanmmm21/secure-tool-runtime.git@feat/ai-core-roadmap",
+    "semantic-model-router @ git+https://github.com/juanmmm21/semantic-model-router.git@fa5b1adab7ac72da45716f2e071f5772d87309ac",
+    "llm-guardrails-shield @ git+https://github.com/juanmmm21/llm-guardrails-shield.git@da9999a02ac21758280ae13134da37a1107795f5",
+    "orchestra-agents @ git+https://github.com/juanmmm21/orchestra-agents.git@7f0b750db0d71ad8372ef580c8347c690b8f949d",
+    "agentic-memory-layer @ git+https://github.com/juanmmm21/agentic-memory-layer.git@17a23c015f669f28a64d7e3a5697c0f1cbc60131",
+    "secure-tool-runtime @ git+https://github.com/juanmmm21/secure-tool-runtime.git@878b5d2a8940f55ba9d7b03651ada63c3db96015",
 ]
 ops = [
     "httpx>=0.24",
-    "llm-inference-server @ git+https://github.com/juanmmm21/llm-inference-server.git@feat/ai-core-roadmap",
-    "llm-observability-tracer[otel] @ git+https://github.com/juanmmm21/llm-observability-tracer.git@feat/ai-core-roadmap",
-    "llm-eval-harness @ git+https://github.com/juanmmm21/llm-eval-harness.git@feat/ai-core-roadmap",
-    "synthetic-data-generator @ git+https://github.com/juanmmm21/synthetic-data-generator.git@feat/ai-core-roadmap",
-    "dataset-version-control @ git+https://github.com/juanmmm21/dataset-version-control.git@feat/ai-core-roadmap",
-    "llm-annotation-studio @ git+https://github.com/juanmmm21/llm-annotation-studio.git@feat/ai-core-roadmap",
+    "llm-inference-server @ git+https://github.com/juanmmm21/llm-inference-server.git@db8ab2800c044d6354486e9e5353df189c6e320f",
+    "llm-observability-tracer[otel] @ git+https://github.com/juanmmm21/llm-observability-tracer.git@66c507cf8fd058402c1ae38cb2a6a75b9d59cbd0",
+    "llm-eval-harness @ git+https://github.com/juanmmm21/llm-eval-harness.git@a5a9e1a0179cb57e41113cc40ef20bdafb4dcfb8",
+    "synthetic-data-generator @ git+https://github.com/juanmmm21/synthetic-data-generator.git@66cfdd046c3205ba173bcbde22faf241c814245e",
+    "dataset-version-control @ git+https://github.com/juanmmm21/dataset-version-control.git@50f99af38225c8fc7d3b6e792c59da8b9ee65f31",
+    "llm-annotation-studio @ git+https://github.com/juanmmm21/llm-annotation-studio.git@214690713855a1e00d91c8f9861843d632df5618",
 ]
 # PyTorch-heavy pieces, kept apart so `rag`, `agents` and `ops` stay light.
 train = [
-    "llm-qlora-finetuner[hf] @ git+https://github.com/juanmmm21/llm-qlora-finetuner.git@feat/ai-core-roadmap",
+    "llm-qlora-finetuner[hf] @ git+https://github.com/juanmmm21/llm-qlora-finetuner.git@607cb28f9be731ead98978949cfe1711b7859d79",
     "contrastive-embedding-trainer @ git+https://github.com/juanmmm21/contrastive-embedding-trainer.git@v0.1.0",
 ]
 all = ["aicore[rag,agents,ops,train]"]
