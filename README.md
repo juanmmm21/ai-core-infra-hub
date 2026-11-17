@@ -62,6 +62,44 @@ answers; see [docs/sdk.md](docs/sdk.md).
 
 ---
 
+## End-to-end RAG evaluation (HotpotQA)
+
+`eval/rag_e2e.py` measures the whole AI Core RAG pipeline, through the SDK, on HotpotQA
+(*distractor* dev set). The 10 paragraphs of every question are pooled into **one open corpus**
+(1,000 passages for 100 questions; 5,000 for 500), so each question competes with the others'
+paragraphs. Metrics come from llm-eval-harness: exact match and F1 (SQuAD normalization),
+containment, lexical faithfulness, and recall / precision of the supporting paragraphs among the
+top-5 retrieved.
+
+Measured on 2026-11-17 in a cloud container (Intel Xeon @ 2.10 GHz, 4 vCPU, no GPU), Python 3.13,
+torch 2.15 (CPU), sentence-transformers `all-MiniLM-L6-v2`, cross-encoder
+`ms-marco-MiniLM-L-6-v2` (reranking the top 15), and `Qwen2.5-0.5B-Instruct` (GGUF Q4_K_M) served
+by **llm-inference-server** (llama.cpp backend) through `aicore.ops.InferenceClient`:
+
+| HotpotQA dev, first 100 questions | EM | F1 | contains | faithfulness | context recall@5 | context precision@5 | s / question |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BM25 | 0.000 | 0.047 | 0.220 | 1.000 | 0.755 | 0.302 | 0.006 |
+| hybrid, hash embeddings | 0.010 | 0.052 | 0.200 | 1.000 | 0.660 | 0.264 | 0.013 |
+| hybrid, MiniLM | 0.000 | 0.048 | 0.230 | 1.000 | 0.790 | 0.316 | 0.023 |
+| hybrid, MiniLM + cross-encoder | 0.000 | 0.061 | 0.290 | 1.000 | 0.830 | 0.332 | 0.395 |
+| **hybrid, MiniLM + cross-encoder + Qwen2.5-0.5B** | **0.150** | **0.267** | 0.280 | 0.935 | 0.830 | 0.332 | 3.383 |
+
+Retrieval on 500 questions (5,000 passages) tells the same story: context recall@5 0.757 (BM25),
+0.659 (hybrid, hash), 0.789 (hybrid, MiniLM), 0.849 (+ cross-encoder).
+
+Reading the table: without a generator the "answer" is the best-matching sentence, so EM is ~0 by
+construction and the rows compare retrieval. The hash embedder is lexical noise and *hurts* the
+fusion compared with BM25 alone; a real encoder helps (+3.5 points of recall) and the
+cross-encoder helps most (+4 more). A 0.5B model then reaches EM 0.15 / F1 0.27 on multi-hop
+questions — small-model territory — while staying mostly faithful to what was retrieved (0.935).
+Raw per-question results: `eval/results/`.
+
+**CI**: the `eval` job runs the offline configuration (hybrid with hash embeddings, no model
+download) on a fixed 50-question subset and fails if any metric drops more than 0.02 below
+`eval/baseline_ci.json`.
+
+---
+
 ## Running the Panel
 
 ### Prerequisites

@@ -21,3 +21,14 @@ jobs:
       - run: ruff format --check src tests main.py
       - run: mypy
       - run: pytest -q
+
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[rag,ops]"
+      - name: End-to-end RAG regression gate (HotpotQA, 50 questions, offline)
+        run: python eval/rag_e2e.py --data eval/data/hotpotqa_distractor_dev_50.jsonl --configs hybrid-hash --gate eval/baseline_ci.json
